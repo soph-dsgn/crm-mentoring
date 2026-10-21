@@ -20,6 +20,7 @@ dependencies = [
 dev = [
   "httpx>=0.28,<1.0",
   "pytest>=8.3,<10.0",
+  "pytest-cov>=6.0,<8.0",
   "ruff>=0.9,<1.0",
 ]
 
@@ -28,8 +29,18 @@ where = ["."]
 include = ["app*"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=75"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true
+skip_empty = false
 
 [tool.ruff]
 target-version = "py313"
