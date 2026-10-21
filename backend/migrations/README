@@ -1,0 +1,5 @@
+Alembic migration environment for the backend database.
+
+No revision is created at the foundation stage because the domain models are not yet
+implemented. Create and review the first revision together with the first approved model set.
+
