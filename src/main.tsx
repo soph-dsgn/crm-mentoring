@@ -1,0 +1,16 @@
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { MotionConfig } from 'framer-motion'
+import { IconContext } from '@phosphor-icons/react'
+import App from './App'
+import '@fontsource-variable/manrope/index.css'
+import './styles.css'
+import './vision-ui.css'
+import './knowledge.css'
+import './strategy.css'
+import './workflow.css'
+import './approval.css'
+import './select.css'
+import './ux.css'
+
+createRoot(document.getElementById('root')!).render(<React.StrictMode><IconContext.Provider value={{weight:'fill'}}><MotionConfig reducedMotion="user"><App /></MotionConfig></IconContext.Provider></React.StrictMode>)

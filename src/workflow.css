@@ -1,0 +1,50 @@
+.overview-workspace .board-heading p { margin: var(--space-1) 0 0; color: var(--ui-muted); font-size: 14px; }
+.overview-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-5); margin-top: var(--space-6); align-items: start; }
+.overview-panel { min-width: 0; padding: var(--space-6); border-radius: var(--radius-card); background: var(--ui-surface); }
+.overview-panel:first-child { grid-column: span 2; }
+.overview-panel:nth-child(4) { grid-column: span 2; }
+.overview-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.overview-panel-head h2 { margin: 0; color: var(--ui-text); font-size: 20px; line-height: 28px; font-weight: 650; }
+.overview-panel-head p { margin: var(--space-1) 0 0; color: var(--ui-muted); font-size: 13px; line-height: 20px; }
+.overview-panel-head > button { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px 0; border: 0; background: transparent; color: var(--ui-text); font-size: 13px; white-space: nowrap; }
+.overview-list { margin-top: var(--space-4); }
+.overview-list > button { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); width: 100%; min-height: 64px; padding: var(--space-3) 0; border: 0; border-top: 1px solid var(--ui-line); background: transparent; text-align: left; }
+.overview-list > button:hover strong { text-decoration: underline; text-decoration-color: var(--ui-muted); text-underline-offset: 3px; }
+.overview-list > button > span:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.overview-list strong { overflow: hidden; text-overflow: ellipsis; color: var(--ui-text); font-size: 14px; line-height: 21px; font-weight: 600; }
+.overview-list small { color: var(--ui-muted); font-size: 13px; line-height: 18px; }
+.overview-row-action { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; color: var(--ui-muted); font-size: 12px; white-space: nowrap; }
+.overview-empty { margin: var(--space-6) 0 var(--space-2); color: var(--ui-muted); font-size: 14px; line-height: 22px; }
+.overview-expand { margin-top: var(--space-2); padding: var(--space-2) 0; border: 0; background: transparent; color: var(--ui-text); font-size: 13px; font-weight: 600; }
+.profile-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-6); color: var(--ui-muted); font-size: 13px; }
+.profile-breadcrumb button { padding: 0; border: 0; background: transparent; color: inherit; }
+.profile-breadcrumb button:hover { color: var(--ui-text); text-decoration: underline; }
+.profile-breadcrumb strong { color: var(--ui-text); font-weight: 600; }
+.student-card-open-label { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ui-text); font-size: 13px; font-weight: 600; }
+.group-open-label { position: absolute; right: 76px; bottom: 31px; color: var(--ui-text); font-size: 13px; font-weight: 600; }
+.editorial-group-momentum { padding-right: 125px; }
+.student-workspace { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-5); align-items: start; }
+.student-workspace > .profile-focus { grid-column: 1/-1; }
+.profile-workflow-facts { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--ui-line); color: var(--ui-muted); font-size: 13px; line-height: 20px; }
+.profile-workflow-facts > span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.profile-workflow-facts .text-red { color: #a46b6b; }
+.work-panel .section-head { margin-bottom: var(--space-2); }
+.work-panel .section-head h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 650; }
+.work-panel .section-head h2 span { color: var(--ui-muted); font-size: 14px; font-weight: 500; }
+.work-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); width: 100%; min-height: 64px; padding: var(--space-3) 0; border: 0; border-top: 1px solid var(--ui-line); background: transparent; text-align: left; }
+.work-row > span:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.work-row strong { color: var(--ui-text); font-size: 14px; line-height: 21px; font-weight: 600; }
+.work-row small { color: var(--ui-muted); font-size: 13px; line-height: 18px; }
+.work-row-action { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; color: var(--ui-muted); font-size: 12px; white-space: nowrap; }
+.work-empty { margin: var(--space-4) 0; color: var(--ui-muted); font-size: 14px; line-height: 22px; }
+.work-panel > .btn { margin-top: var(--space-4); }
+.profile-background { margin-top: var(--space-6); }
+.profile-background-toggle { padding: 0; border: 0; background: none; cursor: pointer; color: var(--ui-muted); font-size: 14px; text-align: left; }
+.profile-background-toggle:hover { color: var(--ui-text); }
+.profile-background > .profile-content-grid { margin-top: var(--space-4); }
+.homework-card { scroll-margin-top: var(--space-6); }
+.homework-focused { box-shadow: 0 0 0 2px var(--ui-line); }
+.homework-search { width: min(100%, 420px); min-height: 42px; margin: var(--space-4) 0 var(--space-5); padding: 0 var(--space-4); border: 0; border-radius: 12px; background: #fff; color: var(--ui-text); font: inherit; font-size: 14px; }
+.homework-search::placeholder { color: var(--ui-muted); }
+@media (max-width: 1199px) { .overview-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .overview-panel:first-child,.overview-panel:nth-child(4) { grid-column: auto; } }
+@media (max-width: 700px) { .overview-grid,.student-workspace { grid-template-columns: minmax(0,1fr); } .overview-panel:first-child,.overview-panel:nth-child(4),.student-workspace > .profile-focus { grid-column: auto; } .overview-panel { padding: var(--space-5); } .overview-list > button,.work-row { align-items: flex-start; flex-direction: column; gap: var(--space-1); } .overview-row-action,.work-row-action { font-size: 12px; } }

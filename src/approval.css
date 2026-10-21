@@ -1,0 +1,38 @@
+.approval-page { min-width:0; }
+.approval-summary { display:flex; gap:0; width:min(100%,700px); margin:24px 0 20px; padding:16px 4px; border-radius:var(--radius-card); background:var(--ui-surface); }
+.approval-summary > div { display:flex; flex:1; align-items:baseline; gap:12px; min-width:0; padding:4px 20px; border-right:1px solid var(--ui-line); color:var(--ui-text); }
+.approval-summary > div:last-child { border-right:0; }
+.approval-summary strong { font-size:24px; line-height:32px; font-weight:650; }
+.approval-summary span { color:var(--ui-muted); font-size:13px; line-height:18px; }
+.approval-tabs { flex-wrap:wrap; }
+.approval-filters { display:flex; gap:12px; margin:20px 0; }
+.approval-filters label { display:flex; align-items:center; gap:10px; flex:1; max-width:420px; min-width:0; height:44px; padding:0 14px; border-radius:var(--radius-control); background:var(--ui-surface); color:var(--ui-muted); }
+.approval-filters input { flex:1; min-width:0; height:100%; border:0; outline:0; background:transparent; color:var(--ui-text); font-size:14px; }
+.approval-filters select { height:44px; min-width:180px; padding:0 14px; border:0; border-radius:var(--radius-control); background:var(--ui-surface); color:var(--ui-text); font-size:14px; }
+.approval-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:start; }
+.approval-card { min-width:0; padding:24px; border-radius:var(--radius-card); background:var(--ui-surface); }
+.approval-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.approval-card-head>div { min-width:0; }
+.approval-title { display:block; padding:0; border:0; background:none; color:var(--ui-text); text-align:left; font-size:18px; line-height:26px; font-weight:650; cursor:pointer; }
+.approval-title:hover { text-decoration:underline; text-underline-offset:3px; }
+.approval-card-head p { margin:4px 0 0; color:var(--ui-muted); font-size:13px; line-height:20px; }
+.approval-card-head p button { padding:0; border:0; background:none; color:var(--ui-text); font:inherit; cursor:pointer; }
+.approval-card-head p button:hover { text-decoration:underline; }
+.approval-status { flex:none; padding:6px 10px; border-radius:999px; background:var(--ui-bg); color:var(--ui-text); font-size:12px; line-height:18px; white-space:nowrap; }
+.approval-card-meta { display:flex; flex-wrap:wrap; gap:5px 16px; margin-top:20px; color:var(--ui-muted); font-size:13px; line-height:19px; }
+.approval-card-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:20px; }
+.approval-card-fields label,.approval-comment { display:flex; flex-direction:column; gap:7px; min-width:0; color:var(--ui-muted); font-size:13px; line-height:18px; }
+.approval-card-fields label:nth-child(2) { grid-column:1/-1; grid-row:2; }
+.approval-card-fields input,.approval-comment textarea { width:100%; min-width:0; padding:11px 12px; border:0; border-radius:var(--radius-control); background:var(--ui-bg); color:var(--ui-text); font-size:14px; line-height:20px; }
+.approval-card-fields input { height:44px; }
+.approval-comment { margin-top:20px; }
+.approval-comment textarea { resize:vertical; }
+.approval-material { display:inline-flex; align-items:center; gap:6px; margin-top:14px; color:var(--ui-text); font-size:13px; text-decoration:underline; text-underline-offset:3px; }
+.approval-hint { margin:12px 0 0; color:var(--ui-muted); font-size:13px; }
+.approval-next { margin:20px 0 0; color:var(--ui-muted); font-size:13px; line-height:20px; }
+.approval-next strong { color:var(--ui-text); font-weight:600; }
+.approval-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; padding-top:18px; border-top:1px solid var(--ui-line); }
+.approval-actions .btn { min-height:40px; }
+@media (max-width:1100px) { .approval-list { grid-template-columns:minmax(0,1fr); } }
+@media (max-width:700px) { .approval-summary { width:100%; } .approval-summary > div { flex-direction:column; align-items:flex-start; gap:2px; padding:4px 12px; } .approval-summary strong { font-size:20px; line-height:28px; } .approval-summary span { font-size:12px; } .approval-filters { flex-direction:column; } .approval-filters label,.approval-filters .ui-select-trigger { width:100%; max-width:none; } }
+@media (max-width:480px) { .approval-card { padding:20px; } .approval-card-head { flex-direction:column; gap:10px; } .approval-actions .btn { width:100%; justify-content:center; } }
