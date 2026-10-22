@@ -59,7 +59,7 @@ alembic current
 alembic check
 ```
 
-Frontend из корня репозитория:
+Frontend из каталога `frontend/`:
 
 ```powershell
 npm ci
@@ -84,7 +84,7 @@ npm run verify:workflow
 ### Frontend
 
 - бизнес-правила и действующий пользовательский сценарий не нарушены
-- ESLint, TypeScript/Vite build и `scripts/verify-workflow.mjs` проходят
+- ESLint, TypeScript/Vite build и `frontend/scripts/verify-workflow.mjs` проходят
 - новый тестовый фреймворк не добавлен без отдельного обоснования
 - если затронут интерфейс, выполнена релевантная desktop/mobile-проверка либо явно указано,
   почему она не выполнялась
