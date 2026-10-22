@@ -7,6 +7,8 @@
   --ui-muted: #9a9ca5;
   --ui-line: #eceef2;
   --ui-black: #000000;
+  --ui-focus: #718096;
+  --ui-focus-ring: rgba(91, 111, 139, .16);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
