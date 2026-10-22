@@ -12,5 +12,6 @@ import './workflow.css'
 import './approval.css'
 import './select.css'
 import './ux.css'
+import './task-card.css'
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><IconContext.Provider value={{weight:'fill'}}><MotionConfig reducedMotion="user"><App /></MotionConfig></IconContext.Provider></React.StrictMode>)

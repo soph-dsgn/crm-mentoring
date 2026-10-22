@@ -19,7 +19,11 @@
   --radius-card: 22px;
   --radius-control: 12px;
   --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --motion-fast: 140ms;
+  --motion-quick: 180ms;
+  --motion-standard: 220ms;
+  --motion-modal: 250ms;
   color: var(--ui-text);
   background: var(--ui-bg);
 }
@@ -27,7 +31,7 @@ html, body, #root { width: 100%; min-height: 100dvh; }
 html { background: var(--ui-bg); }
 body, button, input, select, textarea { font-family: 'Manrope Variable', Manrope, sans-serif; letter-spacing: 0 !important; }
 body { background: var(--ui-bg); color: var(--ui-text); font-size: 15px; line-height: 24px; overflow-x: hidden; }
-button, a, input, select, textarea { transition: background-color .18s ease, color .18s ease, opacity .18s ease, box-shadow .18s ease; }
+button, a, input, select, textarea { transition: background-color var(--motion-quick) var(--motion-ease-out), color var(--motion-quick) var(--motion-ease-out), opacity var(--motion-quick) var(--motion-ease-out), box-shadow var(--motion-quick) var(--motion-ease-out); }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #747984 !important; outline-offset: 3px; }
 button:hover { transform: none !important; }
 svg { flex-shrink: 0; }
