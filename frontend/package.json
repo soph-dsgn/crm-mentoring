@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "lint": "eslint src scripts eslint.config.js --max-warnings 0",
     "build": "tsc -b && vite build",
+    "verify": "npm run verify:workflow",
     "verify:workflow": "node scripts/verify-workflow.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },

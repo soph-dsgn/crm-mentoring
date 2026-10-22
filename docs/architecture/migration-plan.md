@@ -30,7 +30,7 @@
 ### 3. Преобразование
 
 - `Group` → group с `legacy_id` mapping;
-- каждый legacy `Student(groupId)` → user + student_profile с обязательным `group_id` + strategy;
+- каждый legacy `Student(groupId)` → user + `Student` с обязательным `group_id` + strategy;
 - одинаковые имена в разных группах не считать одним учеником и не объединять автоматически;
 - sections/tasks → соответствующая strategy с сохранением порядка, source file и history;
 - старый `status` сохранить в raw import record, канонический `study_status` получить по тем же правилам, что `normalizeData`;
