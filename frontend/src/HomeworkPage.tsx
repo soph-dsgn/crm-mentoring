@@ -9,7 +9,7 @@ import { useCalmMotion } from './motion'
 export function HomeworkCard({ homework, onUpdate, onTask, taskExists, onDelete, focused=false }: { homework: Homework; onUpdate: (id:string, patch:Partial<Homework>)=>void; onTask:(id:string)=>void; taskExists:(id:string)=>boolean; onDelete:(id:string)=>void; focused?:boolean }) {
   const [copied,setCopied] = useState(false)
   const [copyError,setCopyError] = useState('')
-  const copy = async () => { try { await copyText(homework.text); if(homework.status==='draft')onUpdate(homework.id,{status:'issued',issuedAt:new Date().toISOString()}); setCopied(true); setCopyError(''); window.setTimeout(()=>setCopied(false),1800) } catch { setCopyError('Не удалось скопировать. Откройте текст задания и скопируйте его вручную') } }
+  const copy = async () => { try { await copyText(homework.text); setCopied(true); setCopyError(''); window.setTimeout(()=>setCopied(false),1800) } catch { setCopyError('Не удалось скопировать. Откройте текст задания и скопируйте его вручную') } }
   const canSubmit=['draft','issued','progress','revision'].includes(homework.status)
   const needsDecision=homework.status==='submitted'
   return <article id={`homework-${homework.id}`} className={`homework-card ${focused?'homework-focused':''}`}>
@@ -21,6 +21,7 @@ export function HomeworkCard({ homework, onUpdate, onTask, taskExists, onDelete,
     {(needsDecision||homework.status==='revision')&&<div className="homework-review-fields"><label>Комментарий куратора<textarea rows={2} placeholder="Что принять или исправить" value={homework.comment} onChange={e=>onUpdate(homework.id,{comment:e.target.value})}/></label></div>}
     {homework.status==='accepted'&&homework.comment&&<p className="homework-comment">Комментарий к проверке: {homework.comment}</p>}
     <div className="homework-actions">
+      {homework.status==='draft'&&<button className="btn secondary" onClick={()=>onUpdate(homework.id,{status:'issued',issuedAt:new Date().toISOString()})}>Отметить выданным</button>}
       {(homework.status==='issued'||homework.status==='revision')&&<button className="btn secondary" onClick={()=>onUpdate(homework.id,{status:'progress'})}>Отметить в работе</button>}
       {canSubmit&&<button className="btn dark" disabled={!homework.workUrl.trim()} title={!homework.workUrl.trim()?'Добавьте ссылку на работу':''} onClick={()=>onUpdate(homework.id,{status:'submitted',submittedAt:new Date().toISOString()})}>Отправить на проверку</button>}
       {needsDecision&&<><button className="btn secondary" onClick={()=>onUpdate(homework.id,{status:'revision'})}>Вернуть на доработку</button><button className="btn dark" onClick={()=>onUpdate(homework.id,{status:'accepted'})}><Check size={17}/> Принять работу</button></>}

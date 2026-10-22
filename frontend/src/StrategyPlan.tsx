@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp, CaretDownIcon as ChevronDown, ArrowSquareOutIcon as ExternalLink, PlusIcon as Plus, XIcon as X } from '@phosphor-icons/react'
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp, CaretDownIcon as ChevronDown, ArrowSquareOutIcon as ExternalLink, PlusIcon as Plus } from '@phosphor-icons/react'
 import Select from './Select'
 import Avatar from './Avatar'
-import { copyText } from './clipboard'
-import { APPROVAL_STATUS, curriculumProgress, homeworkDescription, homeworkText, REVIEW_STATUS, STUDY_STATUS, taskColumn } from './data'
-import type { Homework, StrategySection, StrategyTask, Student, StudyStatus, TaskStatus } from './types'
+import { APPROVAL_STATUS, curriculumProgress, REVIEW_STATUS, STUDY_STATUS, taskColumn } from './data'
+import type { StrategySection, StrategyTask, Student, StudyStatus, TaskStatus } from './types'
 import { useCalmMotion } from './motion'
-import { useDialogA11y } from './dialogA11y'
 
 type Props = {
   student: Student; groupName: string; sections: StrategySection[]; tasks: StrategyTask[]
@@ -16,21 +14,13 @@ type Props = {
   onAddSection: (title:string)=>void; onRenameSection: (id:string,title:string)=>void
   onDeleteSection: (id:string)=>void; onMoveTask: (task:StrategyTask,delta:number)=>void
   onChangeSection: (id:string,sectionId:string)=>void
-  onGenerate: (ids:string[],title:string,text:string)=>string
-  onUpdateHomework: (id:string,patch:Partial<Homework>)=>void
 }
 
-export default function StrategyPlan({student,groupName,sections,tasks,onOpenTask,onStatus,onQuickTask,onAddSection,onRenameSection,onDeleteSection,onMoveTask,onChangeSection,onGenerate,onUpdateHomework}:Props) {
+export default function StrategyPlan({student,groupName,sections,tasks,onOpenTask,onStatus,onQuickTask,onAddSection,onRenameSection,onDeleteSection,onMoveTask,onChangeSection}:Props) {
   const calm = useCalmMotion()
   const [collapsed,setCollapsed] = useState<string[]>([])
-  const [selected,setSelected] = useState<string[]>([])
   const [newSection,setNewSection] = useState('')
   const [quick,setQuick] = useState<Record<string,string>>({})
-  const [draftId,setDraftId] = useState('')
-  const previewRef=useDialogA11y(Boolean(draftId),()=>setDraftId(''))
-  const [draftText,setDraftText] = useState('')
-  const [copied,setCopied] = useState(false)
-  const [copyError,setCopyError] = useState('')
   const ordered = [...sections].sort((a,b)=>a.order-b.order)
   const sectionOrder = new Map(ordered.map((section,index)=>[section.id,index]))
   const unsectioned = tasks.filter(task=>!sectionOrder.has(task.sectionId))
@@ -38,35 +28,15 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
   const progress = curriculumProgress(tasks)
   const next = [...tasks].filter(task=>task.studyStatus==='in_progress'&&task.reviewStatus!=='pending').sort((a,b)=>a.order-b.order).slice(0,2)
   const sourceFile = tasks.find(task=>task.sourceFile)?.sourceFile
-  const firstName = student.name.trim().split(/\s+/)[0]
-
-  const toggle = (id:string) => setSelected(ids=>ids.includes(id)?ids.filter(value=>value!==id):[...ids,id])
   const quickAdd = (sectionId:string) => {
     const title=(quick[sectionId]||'').trim()
     if (!title) return
     onQuickTask(title,sectionId,'backlog')
     setQuick(values=>({...values,[sectionId]:''}))
   }
-  const generate = () => {
-    const chosen=tasks.filter(task=>selected.includes(task.id)).sort((a,b)=>(sectionOrder.get(a.sectionId)??999999)-(sectionOrder.get(b.sectionId)??999999)||a.order-b.order)
-    if (!chosen.length) return
-    const items=chosen.map(task=>({taskId:task.id,title:task.title,description:homeworkDescription(task),url:task.url,materials:[...task.materials],dueAt:task.dueAt}))
-    const message=homeworkText(`${firstName}, твоё ДЗ:`,items,'')
-    const id=onGenerate(chosen.map(task=>task.id),'Домашнее задание',message)
-    if (id) { setDraftId(id); setDraftText(message); setCopied(false); setCopyError('') }
-  }
-  const copy = async () => {
-    try {
-      await copyText(draftText)
-      onUpdateHomework(draftId,{text:draftText,status:'issued',issuedAt:new Date().toISOString()})
-      setCopied(true); setCopyError(''); setSelected([])
-    } catch { setCopyError('Не удалось скопировать сообщение. Выделите текст и скопируйте вручную') }
-  }
-
   return <div className="study-plan">
     <div className="study-plan-head">
       <div className="study-plan-identity"><Avatar student={student} size="sm"/><div><h2>Стратегия {student.name}</h2><p>{groupName}{groupName?' · ':''}{student.stageKnown===false?'Этап не указан':student.stage==='start'?'Начало':student.stage==='portfolio'?'Портфолио':'Отклики'} · {progress.total?`${progress.done} из ${progress.total} выполнено · ${progress.percent}%`:'Задач пока нет'}</p></div></div>
-      {selected.length>0&&<button className="btn dark" onClick={generate}>Сформировать ДЗ · {selected.length}</button>}
     </div>
     {next.length>0&&<p className="study-next">Сейчас: {next.map(task=>task.title).join(' · ')}</p>}
     {sourceFile&&<a className="study-source" href={encodeURI('/'+sourceFile.replace(/^public\//,''))} target="_blank" rel="noreferrer">Открыть исходную стратегию <ExternalLink size={15}/></a>}
@@ -83,7 +53,6 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
             const material=task.url||task.materials.find(value=>/^https?:\/\//i.test(value))
             const reviewing=task.reviewStatus==='pending'||task.reviewStatus==='revision'
             return <motion.div className="study-task" key={task.id} layout="position" layoutDependency={`${task.order}:${task.sectionId}`} {...calm.list} transition={{...calm.list.transition,layout:calm.layout}}>
-              <label className="study-task-select"><input type="checkbox" checked={selected.includes(task.id)} onChange={()=>toggle(task.id)} aria-label={`Выбрать для ДЗ: ${task.title}`}/></label>
               <button className="study-task-title" onClick={()=>onOpenTask(task.id)}><strong>{task.title}</strong>{(task.description||task.period)&&<small>{task.description||`Период: ${task.period}`}</small>}</button>
               {reviewing&&<small className="study-review">{REVIEW_STATUS[task.reviewStatus]}</small>}
               {task.approvalStatus==='revision'&&<small className="study-review">{APPROVAL_STATUS.revision}</small>}
@@ -98,6 +67,5 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
       </motion.section>
     })}</AnimatePresence></div> : <div className="profile-empty"><strong>Стратегия пока пуста</strong><p>Добавьте первый раздел и задачи после знакомства с ученицей</p></div>}
     <form className="study-new-section" onSubmit={event=>{event.preventDefault();if(newSection.trim()){onAddSection(newSection.trim());setNewSection('')}}}><input aria-label="Название нового раздела" placeholder="Название нового раздела" value={newSection} onChange={event=>setNewSection(event.target.value)}/><button className="btn secondary" type="submit"><Plus size={16}/> Добавить раздел</button></form>
-    <AnimatePresence initial={false}>{draftId&&<motion.div key="homework-preview" className="modal-backdrop" {...calm.backdrop} onMouseDown={event=>{if(event.target===event.currentTarget)setDraftId('')}}><motion.div ref={previewRef} tabIndex={-1} className="dialog wide" role="dialog" aria-modal="true" aria-label="Домашнее задание" {...calm.modal}><div className="dialog-head"><h2>Домашнее задание</h2><button className="icon-btn" onClick={()=>setDraftId('')} aria-label="Закрыть"><X size={16}/></button></div><div className="form"><p>Черновик сохранён в истории ученицы. Отредактируйте сообщение и скопируйте его для Telegram</p><textarea readOnly={copied} rows={Math.min(20,Math.max(9,selected.length*4))} value={draftText} onChange={event=>{setDraftText(event.target.value);onUpdateHomework(draftId,{text:event.target.value})}}/>{copied&&<p>ДЗ выдано и сохранено в истории. Исходный текст больше не меняется</p>}{copyError&&<p role="alert">{copyError}</p>}<div className="dialog-actions"><button className="btn secondary" onClick={()=>setDraftId('')}>Закрыть</button><button className="btn dark" onClick={copy}>{copied?'Скопировано':'Скопировать текст'}</button></div></div></motion.div></motion.div>}</AnimatePresence>
   </div>
 }
