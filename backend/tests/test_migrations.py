@@ -1,9 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -221,3 +224,92 @@ def test_auth_migration_login_conflict_leaves_domain_schema_unchanged(tmp_path: 
             )
     finally:
         inspected_engine.dispose()
+
+
+def test_owner_guard_migration_preserves_one_owner_under_concurrent_updates(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "owner-guard.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(database_url, connect_args={"timeout": 5})
+    try:
+        with engine.begin() as connection:
+            for user_id in ("owner-one", "owner-two"):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO users (
+                            id, login, normalized_login, role, password_hash,
+                            must_change_password, is_active, is_owner
+                        ) VALUES (
+                            :user_id, :user_id, :user_id, 'admin', 'hash', 0, 1, 1
+                        )
+                        """
+                    ),
+                    {"user_id": user_id},
+                )
+
+        barrier = Barrier(2)
+
+        def deactivate(user_id: str) -> bool:
+            try:
+                with engine.begin() as connection:
+                    barrier.wait()
+                    connection.execute(
+                        text("UPDATE users SET is_active = 0 WHERE id = :user_id"),
+                        {"user_id": user_id},
+                    )
+                return True
+            except IntegrityError:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(executor.map(deactivate, ("owner-one", "owner-two")))
+
+        with engine.connect() as connection:
+            active_owners = connection.scalar(
+                text(
+                    """
+                    SELECT count(*) FROM users
+                    WHERE role = 'admin' AND is_owner = 1 AND is_active = 1
+                    """
+                )
+            )
+            trigger_names = set(
+                connection.scalars(
+                    text(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type = 'trigger' AND tbl_name = 'users'
+                        """
+                    )
+                )
+            )
+        assert outcomes.count(True) == 1
+        assert active_owners == 1
+        assert trigger_names >= {
+            "trg_users_preserve_active_owner_update",
+            "trg_users_preserve_active_owner_delete",
+        }
+    finally:
+        engine.dispose()
+
+    command.downgrade(config, "20261022_0002")
+    downgraded_engine = create_engine(database_url)
+    try:
+        with downgraded_engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text(
+                        """
+                    SELECT count(*) FROM sqlite_master
+                    WHERE type = 'trigger' AND tbl_name = 'users'
+                    """
+                    )
+                )
+                == 0
+            )
+    finally:
+        downgraded_engine.dispose()

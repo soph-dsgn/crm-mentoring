@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 
@@ -11,10 +12,14 @@ from app.core.config import get_settings
 def build_engine(database_url: str) -> Engine:
     url = make_url(database_url)
     connect_args = {"check_same_thread": False} if url.get_backend_name() == "sqlite" else {}
+    engine_options: dict[str, Any] = {}
+    if url.get_backend_name() == "sqlite" and url.database in (None, "", ":memory:"):
+        engine_options["poolclass"] = StaticPool
     database_engine = create_engine(
         database_url,
         connect_args=connect_args,
         pool_pre_ping=True,
+        **engine_options,
     )
 
     if url.get_backend_name() == "sqlite":
