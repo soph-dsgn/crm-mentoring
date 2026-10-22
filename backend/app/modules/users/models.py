@@ -6,11 +6,13 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, String, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db.base import Base
+from app.modules.auth.passwords import normalize_login
 
 if TYPE_CHECKING:
+    from app.modules.auth.models import AuthSession
     from app.modules.groups.models import Group
     from app.modules.students.models import Student
 
@@ -41,6 +43,7 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     login: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_login: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     role: Mapped[UserRole] = mapped_column(user_role_type(), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     must_change_password: Mapped[bool] = mapped_column(
@@ -69,3 +72,12 @@ class User(Base):
         passive_deletes=True,
         uselist=False,
     )
+    auth_sessions: Mapped[list[AuthSession]] = relationship(
+        back_populates="user",
+        passive_deletes=True,
+    )
+
+    @validates("login")
+    def validate_login(self, _: str, value: str) -> str:
+        self.normalized_login = normalize_login(value)
+        return self.normalized_login
