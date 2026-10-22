@@ -43,7 +43,7 @@ export function mergeStrategies(current: AppData, source: unknown): AppData {
     sections.push(...seed.sections.filter(s => s.studentId === imported.id && !sections.some(old => old.id === s.id)) as StrategySection[])
     tasks.push(...seed.tasks.filter(t => t.studentId === imported.id && !tasks.some(old => old.id === t.id)) as StrategyTask[])
   }
-  return { ...current, version: 3, demo: false, groups, students, sections, tasks,
+  return { ...current, version: 4, demo: false, groups, students, sections, tasks,
     meetings: current.meetings.filter(m => !m.id.startsWith('demo-') && !m.studentId.startsWith('demo-')),
     homeworks: current.homeworks.filter(h => !h.id.startsWith('demo-') && !h.studentId.startsWith('demo-')),
     importConflicts: [...conflicts] }

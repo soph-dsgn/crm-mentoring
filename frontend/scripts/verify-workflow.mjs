@@ -11,6 +11,7 @@ try {
   const { default: AnyaPage } = await server.ssrLoadModule('/src/AnyaPage.tsx')
   const { default: TaskDetail } = await server.ssrLoadModule('/src/TaskDetail.tsx')
   const { default: TaskForm } = await server.ssrLoadModule('/src/TaskForm.tsx')
+  const { default: MeetingWorkspace } = await server.ssrLoadModule('/src/MeetingWorkspace.tsx')
   const { GroupsPage } = await server.ssrLoadModule('/src/GroupViews.tsx')
   const { normalizeData, applyApprovalStatus, applyHomeworkPatch, needsAnyaApproval, planProgress, curriculumProgress, taskColumn, homeworkText, addCalendarMonths } = dataModule
   const { mergeStrategies } = await server.ssrLoadModule('/src/strategyImport.ts')
@@ -43,16 +44,19 @@ try {
   assert.equal(afterMerge.tasks[0].studyStatus,'hold')
   assert.equal(afterMerge.tasks.length,749)
   const previousStorage=globalThis.localStorage
-  const browserStore=new Map([[dataModule.STORAGE_KEY,JSON.stringify(edited)]])
+  const beforeWeekly={...edited,version:3}
+  const browserStore=new Map([[dataModule.STORAGE_KEY,JSON.stringify(beforeWeekly)]])
   globalThis.localStorage={getItem:key=>browserStore.get(key)??null,setItem:(key,value)=>browserStore.set(key,value)}
   try {
     assert.equal(dataModule.loadData().tasks[0].title,'Моя правка')
     assert.equal(JSON.parse(browserStore.get(dataModule.PRE_SECTION_BACKUP_KEY)).tasks[0].title,'Моя правка')
+    assert.equal(JSON.parse(browserStore.get(dataModule.PRE_WEEKLY_BACKUP_KEY)).version,3)
   } finally { globalThis.localStorage=previousStorage }
   const legacy = normalizeData({ version: 1, groups: [], students: [], tasks: [
     { id: 'old', studentId: 'student', title: 'Старое задание', status: 'progress', dueAt: '', description: 'Инструкция', comments: '', materials: [], url: '' },
   ] })
   assert.equal(legacy.tasks.length, 1)
+  assert.deepEqual(legacy.groupMeetings, [])
   assert.equal(taskColumn(legacy.tasks[0]), 'progress')
   const anyaLegacy = normalizeData({ version: 3, groups: [], students: [], tasks: [{ id: 'anya', studentId: 'student', title: 'Ревью', status: 'done', studyStatus: 'done', owner: 'Аня', approvalStatus: 'revision', reviewStatus: 'revision' }] })
   assert.equal(anyaLegacy.tasks[0].reviewStatus, 'none')
@@ -100,7 +104,7 @@ try {
   const reloaded = normalizeData(JSON.parse(JSON.stringify(afterEdit)))
   assert.equal(reloaded.tasks[0].reviewStatus, 'accepted')
   assert.equal(reloaded.homeworks[0].text, 'Исходный текст')
-  assert.match(homeworkText('Настя, твоё ДЗ:', [{ taskId: '1', title: 'Резюме', description: 'Собрать опыт', url: 'https://example.com/template', materials: [], dueAt: '' }], ''), /1\. Резюме — Собрать опыт\nhttps:\/\/example.com\/template/)
+  assert.match(homeworkText('Настя, твоё ДЗ:', [{ taskId: '1', title: 'Резюме', description: 'Собрать опыт', url: 'https://example.com/template', materials: [], dueAt: '' }]), /1\. Резюме — Собрать опыт\nhttps:\/\/example.com\/template/)
   const noop = () => {}
   const anyaMarkup = renderToStaticMarkup(React.createElement(AnyaPage, { data: { ...approvalData, tasks: [approvalTask], students: [{ id: 'student', groupId: 'group', name: 'Настя' }], groups: [{ id: 'group', name: 'Группа 1' }] }, onStudent: noop, onTask: noop, onApproval: noop, onComment: noop, onType: noop, onMaterial: noop, onDeadline: noop }))
   assert.ok(anyaMarkup.includes('Проверка резюме'))
@@ -128,12 +132,37 @@ try {
   assert.ok(markup.includes('Стратегия Настя'))
   assert.ok(!markup.includes('study-board'))
   assert.ok(markup.includes('Статус задачи: Старое задание'))
-  assert.ok(markup.includes('Выбрать для ДЗ'))
+  assert.ok(!markup.includes('Выбрать для ДЗ'))
+  assert.ok(!markup.includes('Сформировать ДЗ'))
   const pendingMarkup = renderToStaticMarkup(React.createElement(StrategyPlan, { student: { id: 'student', name: 'Настя', stage: 'start' }, groupName:'Группа 1', sections: [], tasks: [submitted.tasks[0]], onOpenTask: noop, onStatus: noop, onQuickTask: noop, onAddSection: noop, onRenameSection: noop, onDeleteSection: noop, onMoveTask: noop, onChangeSection: noop, onGenerate: () => '', onUpdateHomework: noop }))
   assert.ok(pendingMarkup.includes('На проверке'))
   assert.match(pendingMarkup, /role="combobox"[^>]*disabled=""[^>]*class="ui-select-trigger study-status"/)
   assert.match(pendingMarkup, /class="ui-select-trigger study-status"[^>]*data-status="in_progress"[^>]*>.*?В процессе/)
-  console.log('Workflow verification passed: migration, plan progress, homework review, Anya approval cycle, immutable homework, Telegram text, UI render.')
+  const group4=seeded.groups.find(group=>group.name==='Группа 4')
+  const group4Members=seeded.students.filter(student=>student.groupId===group4.id)
+  const firstStudent=group4Members[0]
+  const weeklyTask=seeded.tasks.find(task=>task.studentId===firstStudent.id)
+  const weeklyHomework={id:'weekly-homework',studentId:firstStudent.id,groupMeetingId:'weekly',title:'Домашнее задание',text:`${firstStudent.name.split(' ')[0]}, твоё ДЗ на неделю:\n\n1. ${weeklyTask.title}`,items:[{taskId:weeklyTask.id,title:weeklyTask.title,description:weeklyTask.description,url:weeklyTask.url,materials:weeklyTask.materials,dueAt:''}],status:'draft',issuedAt:'',submittedAt:'',workUrl:'',comment:'',dueAt:'',createdAt:'2026-10-22T09:00:00.000Z'}
+  const weeklyMeeting={id:'weekly',groupId:group4.id,date:'2026-10-22',status:'draft',studentIds:group4Members.map(student=>student.id),students:group4Members.map((student,index)=>({studentId:student.id,reviewed:true,summary:index===0?'Обсудили результаты недели':'',plannedTaskIds:index===0?[weeklyTask.id]:[],homeworkId:index===0?weeklyHomework.id:'',plannedTaskSnapshot:index===0?[{taskId:weeklyTask.id,title:weeklyTask.title,sectionTitle:'Вводная часть',status:weeklyTask.studyStatus}]:[]})),createdAt:'2026-10-22T09:00:00.000Z',updatedAt:'2026-10-22T09:00:00.000Z',completedAt:''}
+  const weeklyData=normalizeData(JSON.parse(JSON.stringify({...seeded,groupMeetings:[weeklyMeeting],homeworks:[...seeded.homeworks,weeklyHomework]})))
+  assert.equal(weeklyData.groupMeetings.length,1)
+  assert.equal(weeklyData.groupMeetings[0].students.length,group4Members.length)
+  assert.deepEqual(weeklyData.groupMeetings[0].students[0].plannedTaskIds,[weeklyTask.id])
+  assert.equal(weeklyData.groupMeetings[0].students[0].plannedTaskSnapshot[0].title,weeklyTask.title)
+  assert.equal(weeklyData.homeworks.find(item=>item.id==='weekly-homework').text,weeklyHomework.text)
+  const meetingMarkup=renderToStaticMarkup(React.createElement(MeetingWorkspace,{data:weeklyData,group:group4,meeting:weeklyData.groupMeetings[0],onClose:noop,onStatus:noop,onOpenTask:noop,onTogglePlan:noop,onMovePlan:noop,onSummary:noop,onReviewed:noop,onQuickTask:noop,onCreateHomework:()=>'',onUpdateHomework:noop,onComplete:noop}))
+  assert.ok(meetingMarkup.includes('Групповая встреча'))
+  assert.ok(meetingMarkup.includes('Прошлая неделя'))
+  assert.ok(meetingMarkup.includes('План на неделю'))
+  assert.ok(meetingMarkup.includes('Открыть ДЗ'))
+  assert.equal((weeklyData.groupMeetings[0].students[0].plannedTaskIds.filter(id=>id===weeklyTask.id)).length,1)
+  const completedMeeting={...weeklyData.groupMeetings[0],status:'completed',completedAt:'2026-10-22T12:00:00.000Z'}
+  const historyData={...weeklyData,tasks:weeklyData.tasks.filter(task=>task.id!==weeklyTask.id),groupMeetings:[completedMeeting]}
+  const historyMarkup=renderToStaticMarkup(React.createElement(MeetingWorkspace,{data:historyData,group:group4,meeting:completedMeeting,onClose:noop,onStatus:noop,onOpenTask:noop,onTogglePlan:noop,onMovePlan:noop,onSummary:noop,onReviewed:noop,onQuickTask:noop,onCreateHomework:()=>'',onUpdateHomework:noop,onComplete:noop}))
+  assert.ok(historyMarkup.includes('Итоги встречи'))
+  assert.ok(historyMarkup.includes(weeklyTask.title))
+  assert.ok(historyMarkup.includes('Сохранённые итоги групповой встречи'))
+  console.log('Workflow verification passed: migration, weekly group meeting, plan reuse, homework snapshot, review, Anya approval, Telegram text, UI render.')
 } finally {
   await server.close()
 }
