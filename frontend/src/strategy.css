@@ -11,10 +11,10 @@
 .study-section-toggle { flex:1; min-width:0; display:flex; align-items:center; gap:12px; padding:10px 0; text-align:left; background:none; border:0; color:var(--ui-text); cursor:pointer; }
 .study-section-toggle strong { min-width:0; font-size:18px; line-height:26px; font-weight:650; }
 .study-section-toggle span { flex:none; color:var(--ui-muted); font-size:13px; }
-.study-section-toggle svg { transition:transform .18s ease; }
+.study-section-toggle svg { transition:transform var(--motion-quick, 180ms) var(--motion-ease-out, cubic-bezier(.23,1,.32,1)); }
 .study-section-toggle svg.closed { transform:rotate(-90deg); }
 .study-section-actions { display:flex; gap:12px; flex:none; }
-.study-section-actions button { color:var(--ui-muted); font-size:13px; background:none; border:0; cursor:pointer; }
+.study-section-actions button { display:inline-flex; align-items:center; gap:5px; min-height:36px; padding:0 8px; color:var(--ui-muted); font-size:13px; background:none; border:0; border-radius:10px; cursor:pointer; }
 .study-section-actions button:hover { color:var(--ui-text); }
 .study-section-body { padding:0 0 16px; }
 .study-task { display:flex; align-items:center; gap:12px; min-width:0; padding:14px 0; border-top:1px solid var(--ui-line); }

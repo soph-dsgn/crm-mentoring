@@ -35,7 +35,7 @@ export const planProgress = (tasks: StrategyTask[]) => { const agreed=tasks.filt
 export const curriculumProgress = (tasks: StrategyTask[]) => { const done=tasks.filter(t=>taskColumn(t)==='done').length; return {done,total:tasks.length,percent:tasks.length?Math.round(done/tasks.length*100):null} }
 export const progress = (tasks: StrategyTask[]) => curriculumProgress(tasks).percent ?? 0
 export const groupProgress = (data: AppData, group: Group) => { const ids = new Set(data.students.filter(s => s.groupId === group.id).map(s => s.id)); return progress(data.tasks.filter(t => ids.has(t.studentId))) }
-export const nearestTask = (tasks: StrategyTask[]) => tasks.filter(t => taskColumn(t) !== 'done').sort((a,b) => a.dueAt && b.dueAt ? a.dueAt.localeCompare(b.dueAt) : a.dueAt ? -1 : b.dueAt ? 1 : a.studyStatus === b.studyStatus ? a.order-b.order : a.studyStatus === 'in_progress' ? -1 : 1)[0]
+export const nearestTask = (tasks: StrategyTask[]) => tasks.filter(t => taskColumn(t) !== 'done').sort((a,b) => a.studyStatus === b.studyStatus ? a.order-b.order : a.studyStatus === 'in_progress' ? -1 : b.studyStatus === 'in_progress' ? 1 : a.order-b.order)[0]
 export const groupNextTask = (data: AppData, group: Group) => { const ids = new Set(data.students.filter(s => s.groupId === group.id).map(s => s.id)); return nearestTask(data.tasks.filter(t => ids.has(t.studentId))) }
 export const emptyData = (): AppData => ({ version: 3, groups: [], students: [], sections:[], tasks: [], meetings: [], homeworks: [], demo: false })
 export const homeworkDescription = (task: StrategyTask) => {
