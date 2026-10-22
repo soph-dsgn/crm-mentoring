@@ -1,7 +1,7 @@
 import { Children, isValidElement, useId } from 'react'
 import type { ChangeEvent, ReactNode, SelectHTMLAttributes } from 'react'
 import * as RadixSelect from '@radix-ui/react-select'
-import { CaretDownIcon, CheckIcon } from '@phosphor-icons/react'
+import { CaretDownIcon } from '@phosphor-icons/react'
 
 type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size' | 'multiple'> & { children: ReactNode }
 const EMPTY = '__curatorskaya_empty_option__'
@@ -40,7 +40,6 @@ export default function Select({ children, className = '', value, defaultValue, 
         <RadixSelect.Viewport className="ui-select-viewport">
           {options.map(option => <RadixSelect.Item key={option.value} value={option.value === '' ? EMPTY : option.value} disabled={option.disabled} textValue={option.text} className="ui-select-item" data-status={className.includes('study-status') ? option.value : undefined}>
             <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
-            <RadixSelect.ItemIndicator className="ui-select-check"><CheckIcon size={14} weight="fill" aria-hidden="true" /></RadixSelect.ItemIndicator>
           </RadixSelect.Item>)}
         </RadixSelect.Viewport>
       </RadixSelect.Content>

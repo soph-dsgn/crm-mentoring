@@ -1,7 +1,7 @@
 .ui-select-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; min-height:40px; padding:0 14px; border:0; border-radius:var(--radius-control, 12px); background:#fff; color:var(--ui-text, #111); font:500 14px/20px 'Manrope Variable',Manrope,sans-serif; text-align:left; cursor:pointer; }
 .ui-select-trigger:hover { background:#f0f2f6; }
 .ui-select-trigger[data-state='open'] { background:#eceef3; }
-.ui-select-trigger:focus-visible { outline:2px solid #747984; outline-offset:3px; }
+.ui-select-trigger:focus-visible { outline:0; box-shadow:0 0 0 3px rgba(91,111,139,.16); }
 .ui-select-trigger[data-disabled] { cursor:not-allowed; opacity:.6; }
 .ui-select-trigger > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ui-select-chevron { display:inline-flex; align-items:center; color:#888d97; flex:none; }
@@ -9,11 +9,10 @@
 .ui-select-content[data-state='open'] { animation:ui-select-in 180ms cubic-bezier(.23,1,.32,1) both; }
 .ui-select-content[data-state='closed'] { animation:ui-select-out 140ms cubic-bezier(.23,1,.32,1) both; }
 .ui-select-viewport { padding:6px; }
-.ui-select-item { position:relative; display:flex; align-items:center; min-height:40px; padding:8px 36px 8px 12px; border-radius:9px; color:#25272d; font:500 13px/20px 'Manrope Variable',Manrope,sans-serif; cursor:pointer; outline:none; user-select:none; }
+.ui-select-item { position:relative; display:flex; align-items:center; min-height:40px; padding:8px 12px; border-radius:9px; color:#25272d; font:500 13px/20px 'Manrope Variable',Manrope,sans-serif; cursor:pointer; outline:none; user-select:none; }
 .ui-select-item[data-highlighted] { background:#f2f3f7; color:#111; }
 .ui-select-item[data-state='checked'] { background:#f6f7fa; font-weight:650; }
 .ui-select-item[data-disabled] { opacity:.45; cursor:not-allowed; }
-.ui-select-check { position:absolute; right:12px; display:inline-flex; color:#333841; }
 .form .ui-select-trigger { width:100%; background:#f8f9fb; }
 .field > label { font-size:10px; font-weight:700; color:#5e5e5e; }
 .roster-filters .ui-select-trigger,.roster-head .ui-select-trigger { min-height:42px; background:#fff; }

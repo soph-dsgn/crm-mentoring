@@ -69,7 +69,7 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
       {selected.length>0&&<button className="btn dark" onClick={generate}>Сформировать ДЗ · {selected.length}</button>}
     </div>
     {next.length>0&&<p className="study-next">Сейчас: {next.map(task=>task.title).join(' · ')}</p>}
-    {sourceFile&&<a className="study-source" href={encodeURI('/'+sourceFile.replace(/^public\//,''))} target="_blank" rel="noreferrer">Открыть исходную стратегию ↗</a>}
+    {sourceFile&&<a className="study-source" href={encodeURI('/'+sourceFile.replace(/^public\//,''))} target="_blank" rel="noreferrer">Открыть исходную стратегию <ExternalLink size={15}/></a>}
     {displaySections.length ? <div className="study-section-list"><AnimatePresence initial={false}>{displaySections.map(section=>{
       const members=tasks.filter(task=>section.id==='__unsorted'?!sectionOrder.has(task.sectionId):task.sectionId===section.id).sort((a,b)=>a.order-b.order)
       const closed=collapsed.includes(section.id)
