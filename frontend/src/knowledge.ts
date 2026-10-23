@@ -2,6 +2,11 @@ import DOMPurify from 'dompurify'
 import mammoth from 'mammoth'
 import { marked } from 'marked'
 
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  const element=node as Element
+  if(element.tagName==='A'&&element.getAttribute('target')==='_blank') element.setAttribute('rel','noopener noreferrer')
+})
+
 export type KnowledgeKind = 'prompts' | 'chapters'
 export interface KnowledgeRecord {
   id: string

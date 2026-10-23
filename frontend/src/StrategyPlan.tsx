@@ -1,14 +1,11 @@
 import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp, CaretDownIcon as ChevronDown, ArrowSquareOutIcon as ExternalLink, PencilSimpleIcon as Pencil, PlusIcon as Plus, TrashIcon as Trash, XIcon as X } from '@phosphor-icons/react'
+import { ArrowDownIcon as ArrowDown, ArrowUpIcon as ArrowUp, CaretDownIcon as ChevronDown, ArrowSquareOutIcon as ExternalLink, PencilSimpleIcon as Pencil, PlusIcon as Plus, TrashIcon as Trash } from '@phosphor-icons/react'
 import Select from './Select'
-import Avatar from './Avatar'
 import TaskCard from './TaskCard'
 import { copyText } from './clipboard'
-import { APPROVAL_STATUS, curriculumProgress, homeworkDescription, homeworkText, REVIEW_STATUS, taskColumn } from './data'
+import { APPROVAL_STATUS, homeworkDescription, homeworkText, REVIEW_STATUS, taskColumn } from './data'
 import type { Homework, StrategySection, StrategyTask, Student, StudyStatus } from './types'
-import { useCalmMotion } from './motion'
-import { useDialogA11y } from './dialogA11y'
+import { DeleteConfirmDialog, Dialog, InputDialog, NoticeDialog } from './Dialogs'
 
 type Props = {
   student: Student; groupName: string; sections: StrategySection[]; tasks: StrategyTask[]
@@ -21,13 +18,14 @@ type Props = {
   onUpdateHomework: (id:string,patch:Partial<Homework>)=>void
 }
 
-export default function StrategyPlan({student,groupName,sections,tasks,onOpenTask,onStatus,onAddTask,onAddSection,onRenameSection,onDeleteSection,onMoveTask,onChangeSection,onGenerate,onUpdateHomework}:Props) {
-  const calm = useCalmMotion()
+export default function StrategyPlan({student,sections,tasks,onOpenTask,onStatus,onAddTask,onAddSection,onRenameSection,onDeleteSection,onMoveTask,onChangeSection,onGenerate,onUpdateHomework}:Props) {
   const [collapsed,setCollapsed] = useState<string[]>([])
   const [selected,setSelected] = useState<string[]>([])
   const [newSection,setNewSection] = useState('')
   const [draftId,setDraftId] = useState('')
-  const previewRef=useDialogA11y(Boolean(draftId),()=>setDraftId(''))
+  const [renameSection,setRenameSection]=useState<StrategySection|null>(null)
+  const [deleteSection,setDeleteSection]=useState<StrategySection|null>(null)
+  const [sectionNotice,setSectionNotice]=useState(false)
   const [draftText,setDraftText] = useState('')
   const [copied,setCopied] = useState(false)
   const [copyError,setCopyError] = useState('')
@@ -35,8 +33,6 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
   const sectionOrder = new Map(ordered.map((section,index)=>[section.id,index]))
   const unsectioned = tasks.filter(task=>!sectionOrder.has(task.sectionId))
   const displaySections = unsectioned.length ? [...ordered,{id:'__unsorted',studentId:student.id,title:'Без раздела',order:999999,createdAt:''}] : ordered
-  const progress = curriculumProgress(tasks)
-  const next = [...tasks].filter(task=>task.studyStatus==='in_progress'&&task.reviewStatus!=='pending').sort((a,b)=>a.order-b.order).slice(0,2)
   const sourceFile = tasks.find(task=>task.sourceFile)?.sourceFile
   const firstName = student.name.trim().split(/\s+/)[0]
 
@@ -59,18 +55,17 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
 
   return <div className="study-plan">
     <div className="study-plan-head">
-      <div className="study-plan-identity"><Avatar student={student} size="sm"/><div><h2>Стратегия {student.name}</h2><p>{groupName}{groupName?' · ':''}{student.stageKnown===false?'Этап не указан':student.stage==='start'?'Начало':student.stage==='portfolio'?'Портфолио':'Отклики'} · {progress.total?`${progress.done} из ${progress.total} выполнено · ${progress.percent}%`:'Задач пока нет'}</p></div></div>
+      <div className="study-plan-identity"><div><h2>Индивидуальная стратегия</h2><p>{student.stageKnown===false?'Этап не указан':student.stage==='start'?'Начало':student.stage==='portfolio'?'Портфолио':'Отклики'}</p></div></div>
       {selected.length>0&&<button className="btn dark" onClick={generate}>Сформировать ДЗ · {selected.length}</button>}
     </div>
-    {next.length>0&&<p className="study-next">Сейчас: {next.map(task=>task.title).join(' · ')}</p>}
-    {sourceFile&&<a className="study-source" href={encodeURI('/'+sourceFile.replace(/^public\//,''))} target="_blank" rel="noreferrer">Открыть исходную стратегию <ExternalLink size={15} weight="regular"/></a>}
+    {sourceFile&&<a className="study-source" href={encodeURI('/'+sourceFile.replace(/^public\//,''))} target="_blank" rel="noopener noreferrer">Открыть исходную стратегию <ExternalLink size={15} weight="regular"/></a>}
     {displaySections.length ? <div className="study-section-list">{displaySections.map(section=>{
       const members=tasks.filter(task=>section.id==='__unsorted'?!sectionOrder.has(task.sectionId):task.sectionId===section.id).sort((a,b)=>a.order-b.order)
       const closed=collapsed.includes(section.id)
       return <section className="study-section" key={section.id}>
         <div className="study-section-head">
           <button className="study-section-toggle" aria-expanded={!closed} onClick={()=>setCollapsed(ids=>ids.includes(section.id)?ids.filter(id=>id!==section.id):[...ids,section.id])}><ChevronDown size={18} className={closed?'closed':''}/><strong>{section.title}</strong><span>{members.filter(task=>taskColumn(task)==='done').length} / {members.length}</span></button>
-          {section.id!=='__unsorted'&&<div className="study-section-actions"><button className="study-add-task" onClick={()=>onAddTask(section.id)}><Plus size={15} weight="regular"/> Добавить задачу</button><button onClick={()=>{const title=prompt('Название раздела',section.title);if(title?.trim())onRenameSection(section.id,title.trim())}}><Pencil size={15} weight="regular"/> Переименовать</button><button onClick={()=>{if(members.length){alert('Сначала переместите задачи в другой раздел');return}if(confirm(`Удалить раздел «${section.title}»?`))onDeleteSection(section.id)}}><Trash size={15} weight="regular"/> Удалить</button></div>}
+          {section.id!=='__unsorted'&&<div className="study-section-actions"><button className="study-add-task" onClick={()=>onAddTask(section.id)}><Plus size={15} weight="regular"/> Добавить задачу</button><button onClick={()=>setRenameSection(section)}><Pencil size={15} weight="regular"/> Переименовать</button><button onClick={()=>members.length?setSectionNotice(true):setDeleteSection(section)}><Trash size={15} weight="regular"/> Удалить</button></div>}
         </div>
         {!closed&&<div className="study-section-body">
           {members.map((task,index)=>{
@@ -83,6 +78,9 @@ export default function StrategyPlan({student,groupName,sections,tasks,onOpenTas
       </section>
     })}</div> : <div className="profile-empty"><strong>Стратегия пока пуста</strong><p>Добавьте первый раздел и задачи после знакомства с ученицей</p></div>}
     <form className="study-new-section" onSubmit={event=>{event.preventDefault();if(newSection.trim()){onAddSection(newSection.trim());setNewSection('')}}}><input aria-label="Название нового раздела" placeholder="Название нового раздела" value={newSection} onChange={event=>setNewSection(event.target.value)}/><button className="btn secondary" type="submit"><Plus size={16} weight="regular"/> Добавить раздел</button></form>
-    <AnimatePresence initial={false}>{draftId&&<motion.div key="homework-preview" className="modal-backdrop" {...calm.backdrop} onMouseDown={event=>{if(event.target===event.currentTarget)setDraftId('')}}><motion.div ref={previewRef} tabIndex={-1} className="dialog wide" role="dialog" aria-modal="true" aria-label="Домашнее задание" {...calm.modal}><div className="dialog-head"><h2>Домашнее задание</h2><button className="icon-btn" onClick={()=>setDraftId('')} aria-label="Закрыть"><X size={16} weight="regular"/></button></div><div className="form"><p>Черновик сохранён в истории ученицы. Отредактируйте сообщение и скопируйте его для Telegram</p><textarea className="homework-preview-text" readOnly={copied} rows={Math.min(20,Math.max(9,selected.length*4))} value={draftText} onChange={event=>{setDraftText(event.target.value);onUpdateHomework(draftId,{text:event.target.value})}}/>{copied&&<p>ДЗ выдано и сохранено в истории. Исходный текст больше не меняется</p>}{copyError&&<p role="alert">{copyError}</p>}<div className="dialog-actions"><button className="btn secondary" onClick={()=>setDraftId('')}>Закрыть</button><button className="btn dark" onClick={copy}>{copied?'Скопировано':'Скопировать текст'}</button></div></div></motion.div></motion.div>}</AnimatePresence>
+    <Dialog open={Boolean(draftId)} title="Домашнее задание" onClose={()=>setDraftId('')} wide><div className="form"><p>Черновик сохранён в истории ученицы. Отредактируйте сообщение и скопируйте его для Telegram</p><textarea className="homework-preview-text" readOnly={copied} rows={Math.min(20,Math.max(9,selected.length*4))} value={draftText} onChange={event=>{setDraftText(event.target.value);onUpdateHomework(draftId,{text:event.target.value})}}/>{copied&&<p>ДЗ выдано и сохранено в истории. Исходный текст больше не меняется</p>}{copyError&&<p role="alert">{copyError}</p>}<div className="dialog-actions"><button className="btn secondary" onClick={()=>setDraftId('')}>Закрыть</button><button className="btn dark" onClick={copy}>{copied?'Скопировано':'Скопировать текст'}</button></div></div></Dialog>
+    <InputDialog open={Boolean(renameSection)} title="Переименовать раздел" label="Название раздела" initialValue={renameSection?.title||''} onConfirm={title=>{if(renameSection)onRenameSection(renameSection.id,title)}} onClose={()=>setRenameSection(null)}/>
+    <DeleteConfirmDialog open={Boolean(deleteSection)} title="Удалить раздел?" description={`Раздел «${deleteSection?.title||''}» будет удалён`} confirmLabel="Удалить раздел" onConfirm={()=>{if(deleteSection)onDeleteSection(deleteSection.id)}} onClose={()=>setDeleteSection(null)}/>
+    <NoticeDialog open={sectionNotice} title="Раздел пока нельзя удалить" description="Сначала переместите задачи в другой раздел" onClose={()=>setSectionNotice(false)}/>
   </div>
 }

@@ -26,7 +26,7 @@ export interface StrategyTask {
   reviewStatus: ReviewStatus; approvalStatus: ApprovalStatus | null; approvalType: string; approvalSentAt: string; approvalComment: string;
   history: { at: string; label: string }[]
   sectionId: string; studyStatus: StudyStatus; period: string; sourceFile?: string
-  materials: string[]
+  materials: string[]; archivedAt?: string
 }
 export interface StrategySection { id: string; studentId: string; title: string; order: number; createdAt: string }
 export interface Meeting { id: string; studentId: string; date: string; title: string; summary: string; createdAt: string }

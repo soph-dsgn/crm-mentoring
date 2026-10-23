@@ -227,7 +227,7 @@ h2, .section-head h2, .strategy-toolbar h2 { font-size: 24px; line-height: 32px;
   .page-heading { align-items: flex-start; flex-direction: column; }
   .heading-actions { width: 100%; flex-wrap: wrap; }
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) { html:focus-within { scroll-behavior:auto; } .motion-tab-indicator { transition:none !important; } }
 
 /* Workspace scene rebuilt against the supplied desktop canvas reference. */
 .app-shell {

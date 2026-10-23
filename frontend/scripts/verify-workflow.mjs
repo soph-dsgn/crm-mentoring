@@ -18,7 +18,8 @@ try {
   const { HomeworkCard } = await server.ssrLoadModule('/src/HomeworkPage.tsx')
   const { GroupsPage } = await server.ssrLoadModule('/src/GroupViews.tsx')
   const { motionScrollBehavior } = await server.ssrLoadModule('/src/motion.ts')
-  const { normalizeData, applyApprovalStatus, applyHomeworkPatch, needsAnyaApproval, nearestTask, planProgress, curriculumProgress, taskColumn, homeworkText, addCalendarMonths } = dataModule
+  const { safeExternalUrl } = await server.ssrLoadModule('/src/safeExternalUrl.ts')
+  const { normalizeData, applyApprovalStatus, applyHomeworkPatch, archiveTask, recallApproval, studentTasks, needsAnyaApproval, nearestTask, planProgress, curriculumProgress, taskColumn, homeworkText, addCalendarMonths } = dataModule
   const { mergeStrategies } = await server.ssrLoadModule('/src/strategyImport.ts')
   const seed = JSON.parse(await readFile(new URL('../public/strategies/strategy-seed.json', import.meta.url), 'utf8'))
   const seeded = mergeStrategies(dataModule.emptyData(), seed)
@@ -65,6 +66,20 @@ try {
     assert.equal(dataModule.loadData().tasks[0].title,'Моя правка')
     assert.equal(JSON.parse(browserStore.get(dataModule.PRE_SECTION_BACKUP_KEY)).tasks[0].title,'Моя правка')
   } finally { globalThis.localStorage=previousStorage }
+  const corruptStore=new Map([[dataModule.STORAGE_KEY,'{"version":3,"tasks":']])
+  globalThis.localStorage={getItem:key=>corruptStore.get(key)??null,setItem:(key,value)=>corruptStore.set(key,value)}
+  try {
+    const recovered=dataModule.loadData()
+    assert.deepEqual(recovered,dataModule.emptyData())
+    assert.ok([...corruptStore.entries()].some(([key,value])=>key.startsWith(`${dataModule.STORAGE_KEY}-recovery-`)&&value==='{"version":3,"tasks":'))
+  } finally { globalThis.localStorage=previousStorage }
+  const malformedNested=JSON.stringify({version:3,groups:[],students:[],tasks:[{id:'bad',studentId:'student',title:'Задача',description:{html:'<img onerror=alert(1)>'}}]})
+  const malformedStore=new Map([[dataModule.STORAGE_KEY,malformedNested]])
+  globalThis.localStorage={getItem:key=>malformedStore.get(key)??null,setItem:(key,value)=>malformedStore.set(key,value)}
+  try {
+    assert.deepEqual(dataModule.loadData(),dataModule.emptyData())
+    assert.ok([...malformedStore.values()].includes(malformedNested))
+  } finally { globalThis.localStorage=previousStorage }
   const legacy = normalizeData({ version: 1, groups: [], students: [], tasks: [
     { id: 'old', studentId: 'student', title: 'Старое задание', status: 'progress', dueAt: '', description: 'Инструкция', comments: '', materials: [], url: '' },
   ] })
@@ -92,6 +107,13 @@ try {
   assert.equal(approval.tasks[0].approvalSentAt, '2026-10-22T10:00:00.000Z')
   assert.equal(approval.tasks[0].history.length, 5)
   assert.equal(normalizeData(JSON.parse(JSON.stringify(approval))).tasks[0].approvalStatus, 'approved')
+  const recalled = recallApproval(approval, 'approval', '2026-10-22T12:00:00.000Z')
+  assert.equal(recalled.tasks.length, 1)
+  assert.equal(recalled.tasks[0].approvalStatus, null)
+  assert.equal(recalled.tasks[0].studyStatus, approval.tasks[0].studyStatus)
+  assert.equal(recalled.tasks[0].reviewStatus, approval.tasks[0].reviewStatus)
+  assert.equal(recalled.tasks[0].history.at(-1)?.label, 'Согласование с Аней отозвано')
+  assert.equal(needsAnyaApproval(recalled.tasks[0]), false)
   assert.deepEqual(planProgress([]), { done: 0, total: 0, percent: null })
   assert.deepEqual(curriculumProgress([]), { done: 0, total: 0, percent: null })
   const old = legacy.tasks[0]
@@ -117,14 +139,22 @@ try {
   const reloaded = normalizeData(JSON.parse(JSON.stringify(afterEdit)))
   assert.equal(reloaded.tasks[0].reviewStatus, 'accepted')
   assert.equal(reloaded.homeworks[0].text, 'Исходный текст')
+  const archived = archiveTask(afterEdit, old.id, '2026-10-22T15:00:00.000Z')
+  assert.equal(archived.tasks.length, 2)
+  assert.equal(archived.tasks.find(task=>task.id===old.id)?.archivedAt, '2026-10-22T15:00:00.000Z')
+  assert.equal(archived.homeworks[0].items[0].taskId, old.id)
+  assert.equal(archived.homeworks[0].items[0].title, old.title)
+  assert.equal(studentTasks(archived, 'student').some(task=>task.id===old.id), false)
+  assert.equal(normalizeData(JSON.parse(JSON.stringify(archived))).tasks.find(task=>task.id===old.id)?.archivedAt, '2026-10-22T15:00:00.000Z')
   assert.match(homeworkText('Настя, твоё ДЗ:', [{ taskId: '1', title: 'Резюме', description: 'Собрать опыт', url: 'https://example.com/template', materials: [], dueAt: '' }], ''), /1\. Резюме — Собрать опыт\nhttps:\/\/example.com\/template/)
   const noop = () => {}
-  const anyaMarkup = renderToStaticMarkup(React.createElement(AnyaPage, { data: { ...approvalData, tasks: [approvalTask], students: [{ id: 'student', groupId: 'group', name: 'Настя' }], groups: [{ id: 'group', name: 'Группа 1' }] }, onStudent: noop, onTask: noop, onApproval: noop, onComment: noop, onType: noop, onMaterial: noop, onDeadline: noop }))
+  const anyaMarkup = renderToStaticMarkup(React.createElement(AnyaPage, { data: { ...approvalData, tasks: [approvalTask], students: [{ id: 'student', groupId: 'group', name: 'Настя' }], groups: [{ id: 'group', name: 'Группа 1' }] }, onStudent: noop, onTask: noop, onApproval: noop, onRecall: noop, onComment: noop, onType: noop, onMaterial: noop }))
   assert.ok(anyaMarkup.includes('Проверка резюме'))
   assert.ok(anyaMarkup.includes('Настя'))
   assert.ok(anyaMarkup.includes('Группа 1'))
   assert.ok(anyaMarkup.includes('Передать Ане на проверку'))
   assert.ok(anyaMarkup.includes('Материал, тип и заметки'))
+  assert.ok(anyaMarkup.includes('Отозвать из очереди'))
   const detailMarkup = renderToStaticMarkup(React.createElement(TaskDetail, { task: submitted.tasks[0], studentName: 'Настя', groupName: 'Группа 1', sectionTitle: 'Часть 1', homeworkTitle: 'ДЗ', onHomework: noop, onStatus: noop, onPrepareApproval: noop, onEdit: noop }))
   assert.ok(detailMarkup.includes('Группа 1 · Настя'))
   assert.ok(detailMarkup.includes('Раздел стратегии: Часть 1'))
@@ -148,7 +178,8 @@ try {
   const section={id:'section',studentId:'student',title:'Часть 1',order:0,createdAt:''}
   const markup = renderToStaticMarkup(React.createElement(StrategyPlan, { student: { id: 'student', name: 'Настя', stage: 'start' }, groupName:'Группа 1', sections: [section], tasks: [{...old,sectionId:'section'}], onOpenTask: noop, onStatus: noop, onAddTask: noop, onAddSection: noop, onRenameSection: noop, onDeleteSection: noop, onMoveTask: noop, onChangeSection: noop, onGenerate: () => '', onUpdateHomework: noop }))
   assert.ok(markup.includes('Часть 1'))
-  assert.ok(markup.includes('Стратегия Настя'))
+  assert.ok(markup.includes('Индивидуальная стратегия'))
+  assert.ok(!markup.includes('Сейчас:'))
   assert.ok(!markup.includes('study-board'))
   assert.ok(markup.includes('Статус задачи: Старое задание'))
   assert.ok(markup.includes('Выбрать для ДЗ'))
@@ -192,9 +223,41 @@ try {
   assert.ok(homeworkMarkup.includes('проверено'))
   assert.equal(motionScrollBehavior(true),'auto')
   assert.equal(motionScrollBehavior(false),'smooth')
+  assert.equal(safeExternalUrl(' https://example.com/work '),'https://example.com/work')
+  assert.equal(safeExternalUrl('http://example.com/work'),'http://example.com/work')
+  assert.equal(safeExternalUrl('javascript:alert(1)'),null)
+  assert.equal(safeExternalUrl('data:text/html,<script>alert(1)</script>'),null)
+  assert.equal(safeExternalUrl('//example.com/work'),null)
+  const unsafeTask={...technical,url:'javascript:alert(1)',materials:['data:text/html,unsafe','https://example.com/safe']}
+  const unsafeCardDom=load(renderToStaticMarkup(React.createElement(TaskCard,{task:unsafeTask,onOpen:noop,onStatus:noop})))
+  assert.equal(unsafeCardDom('a[href^="javascript:"], a[href^="data:"]').length,0)
+  assert.equal(unsafeCardDom('a[href="https://example.com/safe"]').length,1)
+  const unsafeDetailDom=load(renderToStaticMarkup(React.createElement(TaskDetail,{task:unsafeTask,studentName:'Настя',groupName:'Группа 1',onStatus:noop,onPrepareApproval:noop,onEdit:noop})))
+  assert.equal(unsafeDetailDom('a[href^="javascript:"], a[href^="data:"]').length,0)
+  const unsafeHomework={...datedRoundTrip.homeworks[0],workUrl:'javascript:alert(1)'}
+  const unsafeHomeworkDom=load(renderToStaticMarkup(React.createElement(HomeworkCard,{homework:unsafeHomework,onUpdate:noop,onTask:noop,taskExists:()=>true,onDelete:noop})))
+  assert.equal(unsafeHomeworkDom('a[href^="javascript:"], a[href^="data:"]').length,0)
   const knowledgeCss = await readFile(new URL('../src/knowledge.css', import.meta.url), 'utf8')
   assert.match(knowledgeCss, /\.knowledge-article ul[^\n]*list-style: disc outside/)
   assert.match(knowledgeCss, /\.knowledge-article ol[^\n]*list-style: decimal outside/)
+  const systemDialogSources = await Promise.all([
+    'App.tsx','StrategyPlan.tsx','TaskForm.tsx','ProfilePage.tsx','KnowledgePage.tsx','Dialogs.tsx',
+  ].map(file=>readFile(new URL(`../src/${file}`, import.meta.url),'utf8')))
+  assert.equal(systemDialogSources.some(source=>/(?:window\.)?(?:alert|confirm|prompt)\s*\(/.test(source)),false)
+  const flowSource = await readFile(new URL('../src/FlowBackground.tsx', import.meta.url),'utf8')
+  assert.ok(!/\b(?:from|import\()\s*['"]three['"]/.test(flowSource))
+  assert.match(flowSource,/webglcontextlost/)
+  assert.match(flowSource,/webglcontextrestored/)
+  assert.match(flowSource,/IntersectionObserver/)
+  assert.match(flowSource,/ResizeObserver/)
+  assert.match(flowSource,/1000\/30/)
+  assert.match(flowSource,/1_200_000/)
+  assert.match(flowSource,/Math\.min\(devicePixelRatio\|\|1,1\.5/)
+  assert.match(flowSource,/visibilityState==='visible'/)
+  assert.match(flowSource,/prefers-reduced-motion/)
+  const flowCss = await readFile(new URL('../src/flow-background.css', import.meta.url),'utf8')
+  assert.match(flowCss,/linear-gradient/)
+  assert.match(flowCss,/@media \(prefers-reduced-motion:reduce\)/)
   console.log('Workflow verification passed: migration, plan progress, homework review, Anya approval cycle, immutable homework, Telegram text, UI render.')
 } finally {
   await server.close()
