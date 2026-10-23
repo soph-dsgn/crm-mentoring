@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ArrowSquareOutIcon as ExternalLink } from '@phosphor-icons/react'
 import TaskStatusSelect from './TaskStatusSelect'
 import { hasTechnicalUntitledTitle } from './taskPresentation'
+import { safeExternalUrl } from './safeExternalUrl'
 import type { StrategyTask, StudyStatus } from './types'
 
 type Props = {
@@ -18,9 +19,10 @@ type Props = {
 
 export default function TaskCard({ task, selected, onSelect, onOpen, onStatus, statusDisabled = false, statusTitle, badge, actions }: Props) {
   const hideTitle = hasTechnicalUntitledTitle(task)
-  const links = [task.url, ...task.materials.filter(value => /^https?:\/\//i.test(value))]
-    .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
-  const notes = task.materials.filter(value => !/^https?:\/\//i.test(value))
+  const values=[task.url,...task.materials].filter(Boolean)
+  const links=values.map(safeExternalUrl).filter((value):value is string=>Boolean(value))
+    .filter((value,index,items)=>items.indexOf(value)===index)
+  const notes=values.filter(value=>!safeExternalUrl(value))
   const openLabel = hideTitle ? 'Открыть задачу без названия' : `Открыть задачу: ${task.title}`
 
   return <article className={`task-card ${hideTitle ? 'task-card-technical' : ''} ${onSelect ? '' : 'task-card-no-check'}`}>
@@ -35,7 +37,7 @@ export default function TaskCard({ task, selected, onSelect, onOpen, onStatus, s
       </button>
       {task.comments && <p className="task-card-comments"><span>Комментарий</span>{task.comments}</p>}
       {(links.length > 0 || notes.length > 0) && <div className="task-card-materials">
-        {links.map((url, index) => <a key={url} href={url} target="_blank" rel="noreferrer">
+        {links.map((url, index) => <a key={url} href={url} target="_blank" rel="noopener noreferrer">
           {index === 0 ? 'Открыть материал' : `Материал ${index + 1}`} <ExternalLink size={14} weight="regular"/>
         </a>)}
         {notes.map((note, index) => <span key={`${note}-${index}`}>{note}</span>)}

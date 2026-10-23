@@ -1,0 +1,4 @@
+.flow-background{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;background:radial-gradient(75% 105% at 24% 0%,rgba(184,216,255,.72),transparent 72%),radial-gradient(65% 95% at 78% 0%,rgba(205,225,255,.7),transparent 74%),linear-gradient(180deg,#f7fbff 0%,rgba(255,255,255,0) 100%)}
+.flow-background canvas{display:block;width:100%;height:100%;opacity:0;transition:opacity 220ms cubic-bezier(.23,1,.32,1)}
+.flow-background canvas[data-renderer="webgl"]{opacity:.86}
+@media (prefers-reduced-motion:reduce){.flow-background canvas{display:none}}

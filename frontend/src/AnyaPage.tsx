@@ -5,12 +5,14 @@ import Select from './Select'
 import { APPROVAL_STATUS, approvalState, dateLabel, needsAnyaApproval } from './data'
 import type { AppData, ApprovalStatus } from './types'
 import { useCalmMotion } from './motion'
+import { safeExternalUrl } from './safeExternalUrl'
 
 type Props = {
   data: AppData
   onStudent: (id: string) => void
   onTask: (id: string) => void
   onApproval: (id: string, status: ApprovalStatus) => void
+  onRecall: (id: string) => void
   onComment: (id: string, comment: string) => void
   onType: (id: string, type: string) => void
   onMaterial: (id: string, url: string) => void
@@ -18,7 +20,7 @@ type Props = {
 
 const filters: (ApprovalStatus|'all')[] = ['to_send','sent','reviewing','revision','approved','all']
 
-export default function AnyaPage({data,onStudent,onTask,onApproval,onComment,onType,onMaterial}:Props) {
+export default function AnyaPage({data,onStudent,onTask,onApproval,onRecall,onComment,onType,onMaterial}:Props) {
   const calm=useCalmMotion()
   const [filter,setFilter] = useState<ApprovalStatus|'all'>('to_send')
   const [groupId,setGroupId] = useState('all')
@@ -42,12 +44,12 @@ export default function AnyaPage({data,onStudent,onTask,onApproval,onComment,onT
       const student=data.students.find(item=>item.id===task.studentId)
       const group=data.groups.find(item=>item.id===student?.groupId)
       const status=approvalState(task)
-      const material=task.url || task.materials.find(value=>/^https?:\/\//i.test(value)) || ''
+      const material=safeExternalUrl(task.url)||task.materials.map(safeExternalUrl).find(Boolean)||''
       const next=status==='to_send'?(material?'Передать материал Ане':'Добавить материал или передать контекст Ане'):status==='sent'?'Уточнить, взята ли работа на проверку':status==='reviewing'?'Дождаться ответа Ани':status==='revision'?'Внести правки и отправить повторно':'Согласование завершено'
       return <article className="approval-card" key={task.id}>
         <div className="approval-card-head"><div><button className="approval-title" onClick={()=>onTask(task.id)}>{task.title}</button><p>{student?<button onClick={()=>onStudent(student.id)}>{student.name}</button>:<span>Ученица удалена</span>} · {group?.name||'Группа удалена'}</p></div><span className="approval-status">{APPROVAL_STATUS[status]}</span></div>
         <div className="approval-card-meta"><span>{task.approvalType||'Тип проверки не указан'}</span>{task.approvalSentAt&&<span>Передано {dateLabel(task.approvalSentAt.slice(0,10))}</span>}</div>
-        {material&&<a className="approval-material" href={material} target="_blank" rel="noreferrer">Открыть материал <ExternalLink size={15} weight="regular"/></a>}
+        {material&&<a className="approval-material" href={material} target="_blank" rel="noopener noreferrer">Открыть материал <ExternalLink size={15} weight="regular"/></a>}
         {task.approvalComment&&<p className="approval-note">{task.approvalComment}</p>}
         <p className="approval-next">Следующий шаг: <strong>{next}</strong></p>
         <div className="approval-actions">
@@ -57,8 +59,9 @@ export default function AnyaPage({data,onStudent,onTask,onApproval,onComment,onT
           {status==='revision'&&<button className="btn dark" onClick={()=>onApproval(task.id,'sent')}>Отправить повторно</button>}
           {(status==='sent'||status==='reviewing')&&<button className="btn dark" onClick={()=>onApproval(task.id,'approved')}>Согласовано</button>}
           {status==='approved'&&<button className="btn secondary" onClick={()=>onApproval(task.id,'to_send')}>Возобновить согласование</button>}
+          <button className="btn secondary" onClick={()=>onRecall(task.id)}>Отозвать из очереди</button>
         </div>
-        <details className="approval-details"><summary>Материал, тип и заметки</summary><div className="approval-card-fields"><label>Тип проверки<input value={task.approvalType} placeholder="Например, резюме" onChange={e=>onType(task.id,e.target.value)}/></label><label>Ссылка на материал<input type="url" value={task.url} placeholder={material||'https://'} onChange={e=>onMaterial(task.id,e.target.value)}/></label></div><label className="approval-comment">Комментарий Ани или мои заметки<textarea rows={2} value={task.approvalComment} onChange={e=>onComment(task.id,e.target.value)} placeholder="Правки, ответ Ани или контекст передачи"/></label></details>
+        <details className="approval-details"><summary>Материал, тип и заметки</summary><div className="approval-card-fields"><label>Тип проверки<input key={`${task.id}-type-${task.approvalType}`} defaultValue={task.approvalType} placeholder="Например, резюме" onBlur={e=>{if(e.target.value!==task.approvalType)onType(task.id,e.target.value)}}/></label><label>Ссылка на материал<input key={`${task.id}-url-${task.url}`} type="url" defaultValue={task.url} placeholder={material||'https://'} onBlur={e=>{if(e.target.value!==task.url)onMaterial(task.id,e.target.value)}}/></label></div><label className="approval-comment">Комментарий Ани или мои заметки<textarea key={`${task.id}-comment-${task.approvalComment}`} rows={2} defaultValue={task.approvalComment} onBlur={e=>{if(e.target.value!==task.approvalComment)onComment(task.id,e.target.value)}} placeholder="Правки, ответ Ани или контекст передачи"/></label></details>
       </article>
     })}</div>:<div className="profile-empty"><strong>{all.length?'По выбранным фильтрам задач нет':'Согласований пока нет'}</strong><p>{all.length?'Выберите другой статус или группу':'Откройте задачу стратегии и добавьте её в очередь Ани'}</p></div>}
   </div>
