@@ -501,3 +501,34 @@ def test_reassignment_service_rejects_stale_curator_assignment(session: Session)
     assert stale.value.status_code == 409
     assert graph["other_group"].curator_id == graph["other"].id
     assert graph["assigned"].is_active is True
+
+
+def test_reassignment_service_rejects_assignment_changed_behind_stale_orm_object(
+    session: Session,
+) -> None:
+    graph = seed_access_graph(session)
+    group = graph["assigned_group"]
+    former_curator = graph["assigned"]
+    replacement = graph["other"]
+    requested_successor = graph["owner"]
+    session.execute(
+        update(Group)
+        .where(Group.id == group.id)
+        .values(curator_id=replacement.id, curator_role=UserRole.ADMIN)
+        .execution_options(synchronize_session=False)
+    )
+    assert group.curator_id == former_curator.id
+
+    with pytest.raises(ApiError) as stale:
+        reassign_groups_and_deactivate(
+            graph["owner"],
+            former_curator,
+            [(group, requested_successor)],
+            session,
+        )
+
+    assert stale.value.status_code == 409
+    assert stale.value.code == "curator_assignment_changed"
+    session.expire_all()
+    assert session.get(Group, group.id).curator_id == replacement.id
+    assert session.get(User, former_curator.id).is_active is True

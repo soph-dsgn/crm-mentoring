@@ -31,6 +31,7 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
         inspector = inspect(engine)
         assert set(inspector.get_table_names()) == {
             "alembic_version",
+            "audit_events",
             "auth_sessions",
             "groups",
             "login_attempts",
@@ -53,6 +54,28 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
         assert {index["name"] for index in inspector.get_indexes("groups")} >= {
             "ix_groups_curator_id",
             "ix_groups_status",
+        }
+        assert {index["name"] for index in inspector.get_indexes("audit_events")} >= {
+            "ix_audit_events_action_created_at",
+            "ix_audit_events_actor_user_id",
+            "ix_audit_events_target_group_id",
+            "ix_audit_events_target_user_id",
+        }
+        audit_foreign_keys = {
+            constraint["name"]: constraint
+            for constraint in inspector.get_foreign_keys("audit_events")
+        }
+        assert audit_foreign_keys["fk_audit_events_actor_user_id_users"]["options"] == {
+            "ondelete": "RESTRICT",
+            "onupdate": "RESTRICT",
+        }
+        assert audit_foreign_keys["fk_audit_events_target_user_id_users"]["options"] == {
+            "ondelete": "RESTRICT",
+            "onupdate": "RESTRICT",
+        }
+        assert audit_foreign_keys["fk_audit_events_target_group_id_groups"]["options"] == {
+            "ondelete": "RESTRICT",
+            "onupdate": "RESTRICT",
         }
         user_unique_constraints = {
             (constraint["name"], tuple(constraint["column_names"]))
@@ -313,3 +336,245 @@ def test_owner_guard_migration_preserves_one_owner_under_concurrent_updates(
             )
     finally:
         downgraded_engine.dispose()
+
+
+def test_user_management_migration_preserves_domain_data_and_downgrades_cleanly(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "user-management-migration.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "20261023_0003")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO users (
+                        id, login, normalized_login, role, password_hash,
+                        must_change_password, is_active, is_owner
+                    ) VALUES ('owner', 'owner', 'owner', 'admin', 'hash', 0, 1, 1)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO groups (
+                        id, curator_id, curator_role, name, starts_at, status
+                    ) VALUES ('group', 'owner', 'admin', 'Group', '2026-01-01', 'active')
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO students (id, group_id, name, user_role, stage)
+                    VALUES ('student', 'group', 'Student', 'student', 'start')
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+    upgraded_engine = create_engine(database_url)
+    try:
+        with upgraded_engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (
+                        id, actor_user_id, target_group_id, action, details
+                    ) VALUES (
+                        'event', 'owner', 'group', 'curator_reassigned',
+                        '{"source":"migration-test"}'
+                    )
+                    """
+                )
+            )
+            assert connection.scalar(text("SELECT name FROM groups WHERE id = 'group'")) == "Group"
+            assert (
+                connection.scalar(text("SELECT name FROM students WHERE id = 'student'"))
+                == "Student"
+            )
+            assert connection.scalar(text("SELECT count(*) FROM audit_events")) == 1
+    finally:
+        upgraded_engine.dispose()
+
+    command.downgrade(config, "20261023_0003")
+    downgraded_engine = create_engine(database_url)
+    try:
+        inspector = inspect(downgraded_engine)
+        assert "audit_events" not in inspector.get_table_names()
+        with downgraded_engine.connect() as connection:
+            assert connection.scalar(text("SELECT login FROM users WHERE id = 'owner'")) == "owner"
+            assert connection.scalar(text("SELECT name FROM groups WHERE id = 'group'")) == "Group"
+            assert (
+                connection.scalar(text("SELECT name FROM students WHERE id = 'student'"))
+                == "Student"
+            )
+            assert (
+                connection.scalar(
+                    text(
+                        """
+                        SELECT count(*) FROM sqlite_master
+                        WHERE type = 'trigger'
+                          AND (
+                              name LIKE 'trg_groups_require_active_curator%'
+                              OR name = 'trg_users_preserve_group_curator_update'
+                          )
+                        """
+                    )
+                )
+                == 0
+            )
+    finally:
+        downgraded_engine.dispose()
+
+
+def test_user_management_migration_serializes_deactivation_and_group_assignment(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "curator-assignment-race.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(database_url, connect_args={"timeout": 5})
+    try:
+        with engine.begin() as connection:
+            for user_id, is_owner in (("owner", 1), ("candidate", 0)):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO users (
+                            id, login, normalized_login, role, password_hash,
+                            must_change_password, is_active, is_owner
+                        ) VALUES (
+                            :user_id, :user_id, :user_id, 'admin', 'hash', 0, 1, :is_owner
+                        )
+                        """
+                    ),
+                    {"user_id": user_id, "is_owner": is_owner},
+                )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO groups (
+                        id, curator_id, curator_role, name, starts_at, status
+                    ) VALUES ('group', 'owner', 'admin', 'Group', '2026-01-01', 'active')
+                    """
+                )
+            )
+
+        barrier = Barrier(2)
+
+        def deactivate_candidate() -> bool:
+            try:
+                with engine.begin() as connection:
+                    barrier.wait()
+                    connection.execute(
+                        text("UPDATE users SET is_active = 0 WHERE id = 'candidate'")
+                    )
+                return True
+            except IntegrityError:
+                return False
+
+        def assign_candidate() -> bool:
+            try:
+                with engine.begin() as connection:
+                    barrier.wait()
+                    connection.execute(
+                        text("UPDATE groups SET curator_id = 'candidate' WHERE id = 'group'")
+                    )
+                return True
+            except IntegrityError:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            deactivate_future = executor.submit(deactivate_candidate)
+            assign_future = executor.submit(assign_candidate)
+            outcomes = [deactivate_future.result(), assign_future.result()]
+
+        with engine.connect() as connection:
+            candidate_is_active = connection.scalar(
+                text("SELECT is_active FROM users WHERE id = 'candidate'")
+            )
+            group_curator_id = connection.scalar(
+                text("SELECT curator_id FROM groups WHERE id = 'group'")
+            )
+            trigger_names = set(
+                connection.scalars(
+                    text(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type = 'trigger'
+                          AND (
+                              name LIKE 'trg_groups_require_active_curator%'
+                              OR name = 'trg_users_preserve_group_curator_update'
+                          )
+                        """
+                    )
+                )
+            )
+
+        assert outcomes.count(True) == 1
+        assert candidate_is_active or group_curator_id != "candidate"
+        assert trigger_names == {
+            "trg_groups_require_active_curator_insert",
+            "trg_groups_require_active_curator_update",
+            "trg_users_preserve_group_curator_update",
+        }
+    finally:
+        engine.dispose()
+
+
+def test_user_management_migration_rejects_existing_inactive_group_curator(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "inactive-curator-upgrade.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "20261023_0003")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO users (
+                        id, login, normalized_login, role, password_hash,
+                        must_change_password, is_active, is_owner
+                    ) VALUES ('inactive', 'inactive', 'inactive', 'admin', 'hash', 0, 0, 0)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO groups (
+                        id, curator_id, curator_role, name, starts_at, status
+                    ) VALUES ('group', 'inactive', 'admin', 'Group', '2026-01-01', 'active')
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    with pytest.raises(RuntimeError, match="must be reassigned to an active admin"):
+        command.upgrade(config, "head")
+
+    inspected_engine = create_engine(database_url)
+    try:
+        inspector = inspect(inspected_engine)
+        assert "audit_events" not in inspector.get_table_names()
+        with inspected_engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                "20261023_0003"
+            )
+            assert connection.scalar(text("SELECT curator_id FROM groups WHERE id = 'group'")) == (
+                "inactive"
+            )
+    finally:
+        inspected_engine.dispose()
