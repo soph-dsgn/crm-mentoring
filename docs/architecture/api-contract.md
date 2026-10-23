@@ -1,6 +1,7 @@
 # Предварительный REST API
 
-Контракт описывает направление реализации, а не существующие эндпоинты. Сейчас реализован только `GET /health` без version prefix.
+Контракт разделяет уже реализованные системные, auth и user-management маршруты и будущий
+бизнес-API. Реализованные маршруты отмечены явно.
 
 ## Общие правила
 
@@ -17,22 +18,40 @@
 | Метод | Путь | Назначение |
 |---|---|---|
 | GET | `/health` | liveness, реализован |
-| POST | `/api/v1/auth/login` | создать серверную сессию |
-| POST | `/api/v1/auth/logout` | отозвать текущую сессию |
-| GET | `/api/v1/auth/me` | текущий пользователь и capabilities |
-| POST | `/api/v1/auth/change-password` | обязательная/обычная смена пароля |
+| POST | `/api/v1/auth/login` | создать серверную сессию, реализован |
+| POST | `/api/v1/auth/logout` | отозвать текущую сессию, реализован |
+| GET | `/api/v1/auth/me` | текущий пользователь, реализован |
+| POST | `/api/v1/auth/change-password` | обязательная/обычная смена пароля, реализован |
 
 Endpoint readiness с проверкой БД следует добавить отдельно (`/ready`), чтобы liveness не зависел от временной ошибки БД.
 
-## Users, groups, students
+## User Management
 
 | Метод | Путь | Назначение |
 |---|---|---|
-| GET/POST | `/api/v1/users` | список/ручное создание аккаунта (owner или согласованное право) |
-| POST | `/api/v1/users/{id}/temporary-password` | сброс и одноразовая выдача временного пароля |
+| POST | `/api/v1/admin/curators` | owner создаёт аккаунт куратора и однократно получает временный пароль |
+| GET | `/api/v1/admin/curators` | admin получает безопасный список кураторов |
+| GET | `/api/v1/admin/curators/{user_id}` | owner получает безопасные данные аккаунта куратора |
+| POST | `/api/v1/admin/curators/{user_id}/deactivate` | owner деактивирует куратора без назначенных групп |
+| POST | `/api/v1/admin/curators/{user_id}/offboard` | owner атомарно переносит группы и деактивирует куратора |
+| POST | `/api/v1/admin/curators/{user_id}/transfer-ownership` | owner передаёт полномочия активному admin |
+| POST | `/api/v1/admin/students/{student_id}/account` | owner или назначенный куратор привязывает student-аккаунт |
+| GET | `/api/v1/admin/students/{student_id}/account` | owner или назначенный куратор читает безопасные данные аккаунта |
+| POST | `/api/v1/admin/students/{student_id}/deactivate-account` | деактивировать аккаунт без удаления профиля ученицы |
+| POST | `/api/v1/admin/users/{user_id}/reset-password` | разрешённый admin сбрасывает пароль и отзывает сессии |
+| POST | `/api/v1/admin/groups/{group_id}/reassign-curator` | owner назначает активного admin куратором группы |
+
+Все изменяющие маршруты требуют authentication, same-origin и CSRF checks. Временный пароль
+возвращается только после успешного commit. Обычные GET-ответы не содержат password hash,
+session/CSRF tokens и временные пароли. Чужой `student_id`/`user_id` маскируется через `404`;
+недостаток полномочий на доступный объект возвращает `403`; конфликты состояния — `409`.
+
+## Будущие groups и students CRUD
+
+| Метод | Путь | Назначение |
+|---|---|---|
 | GET/POST | `/api/v1/groups` | видимые группы / создать и назначить создателя |
 | GET/PATCH | `/api/v1/groups/{id}` | карточка / изменение с object ACL |
-| PUT | `/api/v1/groups/{id}/curator` | переназначить единственного куратора (предлагается owner-only) |
 | GET/POST | `/api/v1/groups/{id}/students` | состав / создать ученика в этой группе |
 | GET/PATCH | `/api/v1/students/{id}` | профиль; student видит только себя |
 | GET/POST | `/api/v1/students/{id}/meetings` | существующая история встреч |

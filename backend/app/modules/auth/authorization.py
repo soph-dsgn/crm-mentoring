@@ -231,7 +231,7 @@ def require_student_update(
     return student
 
 
-def reassign_group(actor: User, group: Group, new_curator: User) -> None:
+def _validate_group_reassignment(actor: User, new_curator: User) -> None:
     if not is_owner(actor):
         raise _forbidden()
     if not is_active_admin(new_curator):
@@ -240,6 +240,10 @@ def reassign_group(actor: User, group: Group, new_curator: User) -> None:
             "invalid_curator",
             "Curator must be an active admin",
         )
+
+
+def reassign_group(actor: User, group: Group, new_curator: User) -> None:
+    _validate_group_reassignment(actor, new_curator)
     group.curator = new_curator
     group.curator_id = new_curator.id
     group.curator_role = UserRole.ADMIN
@@ -290,7 +294,20 @@ def reassign_groups_and_deactivate(
                     "curator_assignment_changed",
                     "Group is no longer assigned to the expected curator",
                 )
-            reassign_group(actor, group, new_curator)
+            _validate_group_reassignment(actor, new_curator)
+            result = database.execute(
+                update(Group)
+                .where(Group.id == group.id, Group.curator_id == target.id)
+                .values(curator_id=new_curator.id, curator_role=UserRole.ADMIN)
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                raise ApiError(
+                    status.HTTP_409_CONFLICT,
+                    "curator_assignment_changed",
+                    "Group is no longer assigned to the expected curator",
+                )
+            database.refresh(group)
         database.flush()
         deactivate_user(actor, target, database, now=now)
         database.flush()
