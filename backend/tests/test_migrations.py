@@ -44,12 +44,14 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "curator_id",
             "name",
             "status",
+            "version",
         }
         assert {column["name"] for column in inspector.get_columns("students")} >= {
             "id",
             "group_id",
             "user_id",
             "name",
+            "version",
         }
         assert {index["name"] for index in inspector.get_indexes("groups")} >= {
             "ix_groups_curator_id",
@@ -362,8 +364,12 @@ def test_user_management_migration_preserves_domain_data_and_downgrades_cleanly(
                 text(
                     """
                     INSERT INTO groups (
-                        id, curator_id, curator_role, name, starts_at, status
-                    ) VALUES ('group', 'owner', 'admin', 'Group', '2026-01-01', 'active')
+                        id, curator_id, curator_role, name, starts_at,
+                        status, status_before_archive
+                    ) VALUES (
+                        'group', 'owner', 'admin', 'Group', '2026-01-01',
+                        'archived', 'active'
+                    )
                     """
                 )
             )
@@ -400,8 +406,53 @@ def test_user_management_migration_preserves_domain_data_and_downgrades_cleanly(
                 == "Student"
             )
             assert connection.scalar(text("SELECT count(*) FROM audit_events")) == 1
+            assert connection.scalar(text("SELECT version FROM groups WHERE id = 'group'")) == 1
+            assert connection.scalar(text("SELECT version FROM students WHERE id = 'student'")) == 1
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (
+                        id, actor_user_id, target_group_id, action, details
+                    ) VALUES (
+                        'business-event', 'owner', 'group', 'group_created', '{}'
+                    )
+                    """
+                )
+            )
+            assert connection.scalar(text("SELECT count(*) FROM audit_events")) == 2
+            trigger_names = set(
+                connection.scalars(
+                    text(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type = 'trigger' AND tbl_name = 'students'
+                        """
+                    )
+                )
+            )
+            assert "trg_students_reject_archived_group_insert" in trigger_names
+            connection.execute(text("DELETE FROM audit_events WHERE id = 'business-event'"))
     finally:
         upgraded_engine.dispose()
+
+    trigger_engine = create_engine(database_url)
+    try:
+        with (
+            pytest.raises(IntegrityError, match="group_archived"),
+            trigger_engine.begin() as connection,
+        ):
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO students (id, group_id, name, user_role, stage)
+                    VALUES ('late-student', 'group', 'Late', 'student', 'start')
+                    """
+                )
+            )
+        with trigger_engine.connect() as connection:
+            assert connection.scalar(text("SELECT count(*) FROM students")) == 1
+    finally:
+        trigger_engine.dispose()
 
     command.downgrade(config, "20261023_0003")
     downgraded_engine = create_engine(database_url)
@@ -432,6 +483,54 @@ def test_user_management_migration_preserves_domain_data_and_downgrades_cleanly(
             )
     finally:
         downgraded_engine.dispose()
+
+
+def test_groups_students_downgrade_rejects_unsupported_audit_actions_atomically(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "business-api-downgrade-guard.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO users (
+                        id, login, normalized_login, role, password_hash,
+                        must_change_password, is_active, is_owner
+                    ) VALUES ('owner', 'owner', 'owner', 'admin', 'hash', 0, 1, 1)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_events (id, actor_user_id, action, details)
+                    VALUES ('event', 'owner', 'group_created', '{}')
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    with pytest.raises(RuntimeError, match="cannot represent audit action group_created"):
+        command.downgrade(config, "20261023_0004")
+
+    inspected_engine = create_engine(database_url)
+    try:
+        inspector = inspect(inspected_engine)
+        assert "version" in {column["name"] for column in inspector.get_columns("groups")}
+        assert "version" in {column["name"] for column in inspector.get_columns("students")}
+        with inspected_engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                "20261025_0005"
+            )
+            assert connection.scalar(text("SELECT action FROM audit_events")) == "group_created"
+    finally:
+        inspected_engine.dispose()
 
 
 def test_user_management_migration_serializes_deactivation_and_group_assignment(

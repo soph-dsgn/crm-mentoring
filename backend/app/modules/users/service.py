@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
@@ -155,7 +155,12 @@ def create_student_account(
     result = database.execute(
         update(Student)
         .where(Student.id == student.id, Student.user_id.is_(None))
-        .values(user_id=user.id, user_role=UserRole.STUDENT)
+        .values(
+            user_id=user.id,
+            user_role=UserRole.STUDENT,
+            version=Student.version + 1,
+            updated_at=func.now(),
+        )
     )
     if result.rowcount != 1:
         raise _conflict("student_account_exists", "Student already has an account")
@@ -282,7 +287,7 @@ def assign_group(
     if curator is None:
         raise _not_found("Curator")
     previous_curator_id = group.curator_id
-    reassign_group(actor, group, curator)
+    reassign_group(actor, group, curator, database)
     record_audit(
         database,
         actor=actor,

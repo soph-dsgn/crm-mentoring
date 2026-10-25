@@ -9,7 +9,9 @@
 - JSON использует `snake_case`, даты — `YYYY-MM-DD`, timestamps — ISO 8601 UTC;
 - списки имеют cursor pagination и стабильную сортировку;
 - ошибки: `{"error":{"code":"...","message":"...","details":{}}}`;
-- создание возвращает `201`, удаление/архивация — `204`, optimistic conflict — `409`;
+- создание возвращает `201`, удаление обычно — `204`, optimistic conflict — `409`;
+- lifecycle-команды групп и профилей возвращают `200` с обновлённым ресурсом и новой `version`,
+  чтобы следующий условный запрос не требовал дополнительного чтения;
 - изменяемые сущности получают `updated_at`; клиент передаёт ожидаемую версию/ETag для защиты от тихой перезаписи;
 - OpenAPI генерируется FastAPI, но является результатом типизированных схем, а не заменой согласованного поведения.
 
@@ -46,15 +48,26 @@ Endpoint readiness с проверкой БД следует добавить о
 session/CSRF tokens и временные пароли. Чужой `student_id`/`user_id` маскируется через `404`;
 недостаток полномочий на доступный объект возвращает `403`; конфликты состояния — `409`.
 
-## Будущие groups и students CRUD
+## Groups и students CRUD
 
 | Метод | Путь | Назначение |
 |---|---|---|
-| GET/POST | `/api/v1/groups` | видимые группы / создать и назначить создателя |
-| GET/PATCH | `/api/v1/groups/{id}` | карточка / изменение с object ACL |
-| GET/POST | `/api/v1/groups/{id}/students` | состав / создать ученика в этой группе |
-| GET/PATCH | `/api/v1/students/{id}` | профиль; student видит только себя |
+| GET/POST | `/api/v1/groups` | видимые группы с cursor pagination / создать с self-assignment (`201`) |
+| GET/PATCH | `/api/v1/groups/{group_id}` | карточка / conditional update по `expected_version` |
+| POST | `/api/v1/groups/{group_id}/archive` | архивировать, сохранив `status_before_archive` (`200`) |
+| POST | `/api/v1/groups/{group_id}/restore` | восстановить предыдущий lifecycle status (`200`) |
+| GET/POST | `/api/v1/groups/{group_id}/students` | admin-состав / создать профиль без аккаунта (`201`) |
+| GET/PATCH | `/api/v1/students/{student_id}` | профиль; student читает только себя, PATCH только admin |
+| POST | `/api/v1/students/{student_id}/archive` | архивировать профиль без деактивации аккаунта (`200`) |
+| POST | `/api/v1/students/{student_id}/restore` | восстановить профиль (`200`) |
 | GET/POST | `/api/v1/students/{id}/meetings` | существующая история встреч |
+
+Все реализованные изменяющие маршруты требуют cookie-сессию, same-origin и CSRF checks. Create и
+Update schemas запрещают лишние поля; `curator_id`, `group_id`, `user_id`, роли и security fields
+нельзя назначить через payload. PATCH не стирает отсутствующие поля, а JSON `links` объединяет
+переданные ключи с существующими. Списки сортируются по стабильному `id` и используют непрозрачный
+cursor. Групповой список учениц доступен только admin; student использует собственный
+`GET /students/{student_id}`. В student-ответах скрыты личные заметки и внутренний curator ID.
 
 ## Strategies и homeworks
 

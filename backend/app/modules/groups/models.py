@@ -13,6 +13,7 @@ from sqlalchemy import (
     Enum,
     ForeignKeyConstraint,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -94,6 +95,7 @@ class Group(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     curator: Mapped[User] = relationship(back_populates="curated_groups")
     students: Mapped[list[Student]] = relationship(
