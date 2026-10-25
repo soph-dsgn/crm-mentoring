@@ -37,7 +37,11 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "audit_events",
             "auth_sessions",
             "groups",
+            "homework_history",
+            "homework_items",
+            "homeworks",
             "login_attempts",
+            "meetings",
             "strategies",
             "strategy_sections",
             "strategy_tasks",
@@ -59,6 +63,9 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "user_id",
             "name",
             "version",
+        }
+        assert {column["name"] for column in inspector.get_columns("strategy_tasks")} >= {
+            "review_status"
         }
         assert {index["name"] for index in inspector.get_indexes("groups")} >= {
             "ix_groups_curator_id",
@@ -401,6 +408,169 @@ def test_strategies_migration_preserves_domain_data_and_enforces_history(
             assert connection.scalar(text("SELECT name FROM students WHERE id = 'student'")) == (
                 "Student"
             )
+    finally:
+        downgraded.dispose()
+
+
+def test_meetings_homeworks_migration_preserves_tasks_and_enforces_snapshots(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "meetings-homeworks-migration.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "20261025_0006")
+    engine = build_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO users (
+                        id, login, normalized_login, role, password_hash,
+                        must_change_password, is_active, is_owner
+                    ) VALUES ('owner', 'owner', 'owner', 'admin', 'hash', 0, 1, 1)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO groups (id, curator_id, curator_role, name, starts_at, status)
+                    VALUES ('group', 'owner', 'admin', 'Group', '2026-01-01', 'active')
+                    """
+                )
+            )
+            for suffix in ("one", "two"):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO students (id, group_id, name, user_role, stage)
+                        VALUES (:student_id, 'group', :name, 'student', 'start')
+                        """
+                    ),
+                    {"student_id": f"student-{suffix}", "name": suffix},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO strategies (id, student_id) VALUES (:strategy_id, :student_id)"
+                    ),
+                    {"strategy_id": f"strategy-{suffix}", "student_id": f"student-{suffix}"},
+                )
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO strategy_sections (id, strategy_id, title, position)
+                        VALUES (:section_id, :strategy_id, 'Section', 0)
+                        """
+                    ),
+                    {"section_id": f"section-{suffix}", "strategy_id": f"strategy-{suffix}"},
+                )
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO strategy_tasks (id, strategy_id, section_id, title, position)
+                        VALUES (:task_id, :strategy_id, :section_id, 'Task', 0)
+                        """
+                    ),
+                    {
+                        "task_id": f"task-{suffix}",
+                        "strategy_id": f"strategy-{suffix}",
+                        "section_id": f"section-{suffix}",
+                    },
+                )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+    upgraded = build_engine(database_url)
+    try:
+        with upgraded.begin() as connection:
+            assert (
+                connection.scalar(
+                    text("SELECT review_status FROM strategy_tasks WHERE id = 'task-one'")
+                )
+                == "none"
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO meetings (id, student_id, date, title)
+                    VALUES ('meeting', 'student-one', '2026-10-26', 'Meeting')
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO homeworks (id, strategy_id, title)
+                    VALUES ('homework', 'strategy-one', 'Homework')
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO homework_items (
+                        id, homework_id, strategy_id, task_id, position, title
+                    ) VALUES (
+                        'item', 'homework', 'strategy-one', 'task-one', 0, 'Snapshot'
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO homework_history (
+                        id, homework_id, actor_user_id, event_type, from_status, to_status
+                    ) VALUES (
+                        'history', 'homework', 'owner', 'homework_status_changed',
+                        'draft', 'issued'
+                    )
+                    """
+                )
+            )
+        with (
+            pytest.raises(IntegrityError, match="homework_item_strategy_mismatch"),
+            upgraded.begin() as connection,
+        ):
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO homework_items (
+                        id, homework_id, strategy_id, task_id, position, title
+                    ) VALUES (
+                        'cross-item', 'homework', 'strategy-one', 'task-two', 1, 'Cross'
+                    )
+                    """
+                )
+            )
+        for statement, marker in (
+            (
+                "UPDATE homework_items SET title = 'Changed' WHERE id = 'item'",
+                "homework_items_append_only",
+            ),
+            ("DELETE FROM homework_history WHERE id = 'history'", "homework_history_append_only"),
+        ):
+            with pytest.raises(IntegrityError, match=marker), upgraded.begin() as connection:
+                connection.execute(text(statement))
+    finally:
+        upgraded.dispose()
+
+    command.downgrade(config, "20261025_0006")
+    downgraded = build_engine(database_url)
+    try:
+        inspector = inspect(downgraded)
+        assert {"meetings", "homeworks", "homework_items", "homework_history"}.isdisjoint(
+            inspector.get_table_names()
+        )
+        assert "review_status" not in {
+            column["name"] for column in inspector.get_columns("strategy_tasks")
+        }
+        with downgraded.connect() as connection:
+            assert connection.scalar(
+                text("SELECT title FROM strategy_tasks WHERE id = 'task-one'")
+            ) == ("Task")
     finally:
         downgraded.dispose()
 

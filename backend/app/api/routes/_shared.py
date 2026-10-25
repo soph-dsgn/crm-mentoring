@@ -58,6 +58,18 @@ def raise_integrity_conflict(database: Session, error: IntegrityError) -> None:
             "Task position is already in use",
             409,
         ),
+        (
+            "homework_items.homework_id, homework_items.task_id",
+            "homework_task_conflict",
+            "Task is already included in the homework",
+            409,
+        ),
+        (
+            "homework_item_strategy_mismatch",
+            "invalid_task_selection",
+            "Task does not belong to the homework strategy",
+            422,
+        ),
     )
     for marker, code, public_message, status_code in mappings:
         if marker in message:

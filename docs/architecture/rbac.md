@@ -113,3 +113,15 @@ PostgreSQL не заявляется до отдельной реализаци�
   актуальное назначение куратора; client-provided IDs не определяют access scope;
 - `strategy_id`, `section_id`, archive/status fields и actor history не принимаются обычным PATCH.
 
+## Применение к Meetings & Homeworks API
+
+- право наследуется по цепочке `Meeting → Student → Group` и
+  `Homework → Strategy → Student → Group`;
+- admin читает все встречи и ДЗ, но изменяет только данные назначенных групп; owner имеет полный
+  доступ; student читает только собственные ресурсы;
+- student может только перевести собственное ДЗ в `progress|submitted`; выдача, возврат,
+  принятие, архивирование и изменение встреч доступны admin в write-scope;
+- student-ответ встречи скрывает внутренние заметки, а история ДЗ — staff actor ID;
+- условные UPDATE одновременно проверяют `expected_version` и текущее назначение куратора;
+  CSRF и same-origin обязательны для каждой mutation.
+

@@ -5,7 +5,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
 
-from app.modules.strategies.models import ApprovalStatus, StudyStatus
+from app.modules.strategies.models import ApprovalStatus, ReviewStatus, StudyStatus
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 LongText = Annotated[str, StringConstraints(max_length=20_000)]
@@ -115,6 +115,7 @@ class TaskRead(BaseModel):
     due_at: datetime | None
     position: int
     study_status: StudyStatus
+    review_status: ReviewStatus
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
