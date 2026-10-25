@@ -17,3 +17,4 @@ venv/
 /imports/
 *.local
 *.tsbuildinfo
+/.codex/handoff.md
