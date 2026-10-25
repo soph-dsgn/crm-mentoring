@@ -60,7 +60,10 @@ session/CSRF tokens и временные пароли. Чужой `student_id`/
 | GET/PATCH | `/api/v1/students/{student_id}` | профиль; student читает только себя, PATCH только admin |
 | POST | `/api/v1/students/{student_id}/archive` | архивировать профиль без деактивации аккаунта (`200`) |
 | POST | `/api/v1/students/{student_id}/restore` | восстановить профиль (`200`) |
-| GET/POST | `/api/v1/students/{id}/meetings` | существующая история встреч |
+| GET/POST | `/api/v1/students/{id}/meetings` | история / создать встречу (`201`) |
+| GET/PATCH | `/api/v1/meetings/{id}` | прочитать / изменить встречу по `expected_version` |
+| POST | `/api/v1/meetings/{id}/archive` | архивировать встречу без удаления |
+| POST | `/api/v1/meetings/{id}/restore` | восстановить встречу |
 
 Все реализованные изменяющие маршруты требуют cookie-сессию, same-origin и CSRF checks. Create и
 Update schemas запрещают лишние поля; `curator_id`, `group_id`, `user_id`, роли и security fields
@@ -90,11 +93,16 @@ cursor. Групповой список учениц доступен тольк
 | GET/POST | `/api/v1/strategies/{id}/homeworks` | история / черновик из выбранных задач |
 | GET/PATCH | `/api/v1/homeworks/{id}` | карточка / допустимые поля текущего состояния |
 | POST | `/api/v1/homeworks/{id}/transitions` | issue, submit, return, accept |
+| GET | `/api/v1/homeworks/{id}/history` | append-only история lifecycle |
+| POST | `/api/v1/homeworks/{id}/archive` | архивировать без удаления снимков и истории |
+| POST | `/api/v1/homeworks/{id}/restore` | восстановить домашнее задание |
 
 Статус выполнения и согласование с Аней меняются отдельными командами, а не произвольным PATCH.
 Они имеют независимые lifecycle и версии. `period_text` остаётся пояснительным текстом и не
 участвует в расчёте дедлайна. История хранит тип события, actor и безопасные технические детали,
-но не дублирует полные тексты комментариев. Homework-маршруты остаются будущим этапом.
+но не дублирует полные тексты комментариев. Student читает только собственные встречи и ДЗ,
+может отметить работу в процессе и отправить её; выдача, возврат и принятие доступны только
+назначенному admin или owner. Только принятие завершает связанные задачи.
 
 ## Импорт, экспорт и файлы
 

@@ -14,6 +14,7 @@ from app.modules.groups.models import Group
 from app.modules.strategies.models import (
     AnyaApproval,
     ApprovalStatus,
+    ReviewStatus,
     Strategy,
     StrategySection,
     StrategyTask,
@@ -416,16 +417,22 @@ def _update_task_row(
     expected_version: int,
     values: dict[str, object],
     now: datetime,
+    *,
+    require_review_unlocked: bool = False,
 ) -> StrategyTask:
-    result = database.execute(
-        update(StrategyTask)
-        .where(
-            StrategyTask.id == task.id,
-            StrategyTask.version == expected_version,
-            _write_scope(task.strategy_id, actor),
+    statement = update(StrategyTask).where(
+        StrategyTask.id == task.id,
+        StrategyTask.version == expected_version,
+        _write_scope(task.strategy_id, actor),
+    )
+    if require_review_unlocked:
+        statement = statement.where(
+            StrategyTask.review_status.notin_([ReviewStatus.PENDING, ReviewStatus.REVISION])
         )
-        .values(**values, version=StrategyTask.version + 1, updated_at=now)
-        .execution_options(synchronize_session=False)
+    result = database.execute(
+        statement.values(
+            **values, version=StrategyTask.version + 1, updated_at=now
+        ).execution_options(synchronize_session=False)
     )
     if result.rowcount != 1:
         database.rollback()
@@ -481,6 +488,8 @@ def change_task_status(
 ) -> StrategyTask:
     if task.archived_at is not None:
         raise _conflict("task_archived", "Restore the task before changing its status")
+    if task.review_status in {ReviewStatus.PENDING, ReviewStatus.REVISION}:
+        raise _conflict("homework_review_pending", "Study status is locked during homework review")
     if payload.study_status not in STUDY_TRANSITIONS[task.study_status]:
         raise _conflict("invalid_status_transition", "Study status transition is not allowed")
     previous = task.study_status
@@ -491,6 +500,7 @@ def change_task_status(
         payload.expected_version,
         {"study_status": payload.study_status},
         now,
+        require_review_unlocked=True,
     )
     _history(
         database,

@@ -38,6 +38,13 @@ class ApprovalStatus(enum.StrEnum):
     APPROVED = "approved"
 
 
+class ReviewStatus(enum.StrEnum):
+    NONE = "none"
+    PENDING = "pending"
+    REVISION = "revision"
+    ACCEPTED = "accepted"
+
+
 def _enum(values: type[enum.StrEnum], name: str) -> Enum:
     return Enum(
         values,
@@ -122,6 +129,7 @@ class StrategyTask(Base):
         Index("ix_strategy_tasks_strategy_id", "strategy_id"),
         Index("ix_strategy_tasks_section_id", "section_id"),
         Index("ix_strategy_tasks_study_status", "study_status"),
+        Index("ix_strategy_tasks_review_status", "review_status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -149,6 +157,12 @@ class StrategyTask(Base):
         nullable=False,
         default=StudyStatus.NOT_STARTED,
         server_default=StudyStatus.NOT_STARTED.value,
+    )
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        _enum(ReviewStatus, "homework_review_status"),
+        nullable=False,
+        default=ReviewStatus.NONE,
+        server_default=ReviewStatus.NONE.value,
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

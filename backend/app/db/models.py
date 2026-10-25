@@ -2,9 +2,12 @@
 
 from app.modules.auth.models import AuthSession, LoginAttempt
 from app.modules.groups.models import Group, GroupStatus
+from app.modules.homeworks.models import Homework, HomeworkHistory, HomeworkItem, HomeworkStatus
+from app.modules.meetings.models import Meeting
 from app.modules.strategies.models import (
     AnyaApproval,
     ApprovalStatus,
+    ReviewStatus,
     Strategy,
     StrategySection,
     StrategyTask,
@@ -21,13 +24,19 @@ __all__ = [
     "AuthSession",
     "Group",
     "GroupStatus",
+    "Homework",
+    "HomeworkHistory",
+    "HomeworkItem",
+    "HomeworkStatus",
     "LoginAttempt",
+    "Meeting",
     "Student",
     "StudentStage",
     "Strategy",
     "StrategySection",
     "StrategyTask",
     "StudyStatus",
+    "ReviewStatus",
     "TaskHistory",
     "AnyaApproval",
     "ApprovalStatus",

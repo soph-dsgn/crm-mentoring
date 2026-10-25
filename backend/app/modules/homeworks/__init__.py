@@ -1,1 +1,1 @@
-"""Homework snapshots and review workflow (planned)."""
+"""Homework snapshots and review workflow."""

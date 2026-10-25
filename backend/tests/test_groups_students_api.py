@@ -337,6 +337,8 @@ def test_openapi_contains_groups_and_students_operations(business_api) -> None:
         ("post", "/api/v1/students/{student_id}/restore"),
         ("get", "/api/v1/students/{student_id}/strategy"),
         ("post", "/api/v1/students/{student_id}/strategy"),
+        ("get", "/api/v1/students/{student_id}/meetings"),
+        ("post", "/api/v1/students/{student_id}/meetings"),
     }
     actual = {
         (method, path)
