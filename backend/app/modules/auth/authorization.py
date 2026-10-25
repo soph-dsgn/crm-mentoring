@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
@@ -242,11 +242,32 @@ def _validate_group_reassignment(actor: User, new_curator: User) -> None:
         )
 
 
-def reassign_group(actor: User, group: Group, new_curator: User) -> None:
+def reassign_group(
+    actor: User,
+    group: Group,
+    new_curator: User,
+    database: Session,
+) -> None:
     _validate_group_reassignment(actor, new_curator)
-    group.curator = new_curator
-    group.curator_id = new_curator.id
-    group.curator_role = UserRole.ADMIN
+    expected_version = group.version
+    result = database.execute(
+        update(Group)
+        .where(Group.id == group.id, Group.version == expected_version)
+        .values(
+            curator_id=new_curator.id,
+            curator_role=UserRole.ADMIN,
+            version=Group.version + 1,
+            updated_at=func.now(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        raise ApiError(
+            status.HTTP_409_CONFLICT,
+            "version_conflict",
+            "Group was changed by another request",
+        )
+    database.refresh(group)
 
 
 def deactivate_user(
@@ -298,7 +319,12 @@ def reassign_groups_and_deactivate(
             result = database.execute(
                 update(Group)
                 .where(Group.id == group.id, Group.curator_id == target.id)
-                .values(curator_id=new_curator.id, curator_role=UserRole.ADMIN)
+                .values(
+                    curator_id=new_curator.id,
+                    curator_role=UserRole.ADMIN,
+                    version=Group.version + 1,
+                    updated_at=func.now(),
+                )
                 .execution_options(synchronize_session=False)
             )
             if result.rowcount != 1:

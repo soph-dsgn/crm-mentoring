@@ -1,20 +1,22 @@
 from __future__ import annotations
 
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Request, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
-from app.db.session import get_db
-from app.modules.auth.dependencies import (
-    AuthContext,
-    request_now,
-    require_auth_context,
-    require_csrf_session,
-    require_same_origin,
+from app.api.routes._shared import (
+    Database,
+    MutationContext,
+    QueryContext,
+    SameOrigin,
 )
+from app.api.routes._shared import (
+    commit as _commit,
+)
+from app.api.routes._shared import (
+    raise_integrity_conflict as _raise_integrity_conflict,
+)
+from app.modules.auth.dependencies import request_now
 from app.modules.auth.passwords import LoginFormatError, PasswordManager
 from app.modules.users.schemas import (
     CuratorPublicResponse,
@@ -35,7 +37,6 @@ from app.modules.users.service import (
     create_student_account,
     deactivate_curator,
     deactivate_student_account,
-    ensure_business_actor,
     get_curator,
     get_student_account,
     list_curators,
@@ -45,73 +46,6 @@ from app.modules.users.service import (
 )
 
 router = APIRouter(prefix="/api/v1/admin", tags=["user-management"])
-
-
-def _commit(database: Session) -> None:
-    try:
-        database.commit()
-    except IntegrityError as error:
-        _raise_integrity_conflict(database, error)
-
-
-def _raise_integrity_conflict(database: Session, error: IntegrityError) -> None:
-    database.rollback()
-    message = str(error.orig).lower()
-    if "last_active_owner_required" in message:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            "last_owner_required",
-            "At least one active owner must remain",
-        ) from error
-    if "normalized_login" in message or "users.login" in message:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            "login_conflict",
-            "Login is already in use",
-        ) from error
-    if "students.user_id" in message:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            "student_account_exists",
-            "Student already has an account",
-        ) from error
-    if "curator_has_groups" in message:
-        raise ApiError(
-            status.HTTP_409_CONFLICT,
-            "curator_has_groups",
-            "Reassign the curator's groups before deactivation",
-        ) from error
-    if "active_curator_required" in message:
-        raise ApiError(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "invalid_curator",
-            "Curator must be an active admin",
-        ) from error
-    raise ApiError(
-        status.HTTP_409_CONFLICT,
-        "conflict",
-        "Operation conflicts with current data",
-    ) from error
-
-
-def _mutating_context(
-    context: Annotated[AuthContext, Depends(require_csrf_session)],
-) -> AuthContext:
-    ensure_business_actor(context.user)
-    return context
-
-
-def _business_context(
-    context: Annotated[AuthContext, Depends(require_auth_context)],
-) -> AuthContext:
-    ensure_business_actor(context.user)
-    return context
-
-
-SameOrigin = Annotated[None, Depends(require_same_origin)]
-MutationContext = Annotated[AuthContext, Depends(_mutating_context)]
-QueryContext = Annotated[AuthContext, Depends(_business_context)]
-Database = Annotated[Session, Depends(get_db)]
 
 
 @router.post(

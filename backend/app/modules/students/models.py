@@ -113,6 +113,7 @@ class Student(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     group: Mapped[Group] = relationship(back_populates="students")
     user: Mapped[User | None] = relationship(back_populates="student_profile")

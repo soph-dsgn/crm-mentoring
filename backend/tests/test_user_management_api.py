@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.errors import ApiError
 from app.core.config import Settings
 from app.db.base import Base
 from app.db.session import build_engine, get_db
@@ -23,6 +24,7 @@ from app.modules.groups.models import Group, GroupStatus
 from app.modules.students.models import Student
 from app.modules.users.audit import AuditAction, AuditEvent
 from app.modules.users.models import User, UserRole
+from app.modules.users.service import assign_group
 
 PASSWORD = "correct horse battery staple"
 
@@ -413,6 +415,7 @@ def test_assigned_curator_creates_student_account_without_changing_profile(
         assert persisted.group_id == group.id
         assert persisted.notes == "keep me"
         assert persisted.user_id == response.json()["user"]["id"]
+        assert persisted.version == 2
         account = database.get(User, persisted.user_id)
         assert account.role is UserRole.STUDENT
         assert account.must_change_password is True
@@ -568,6 +571,10 @@ def test_owner_reassigns_group_and_offboards_curator_atomically(
             database.get(Group, group_one.id).curator_id,
             database.get(Group, group_two.id).curator_id,
         } == {successor.id}
+        assert {
+            database.get(Group, group_one.id).version,
+            database.get(Group, group_two.id).version,
+        } == {2}
         actions = list(database.scalars(select(AuditEvent.action)))
         assert actions.count(AuditAction.CURATOR_REASSIGNED) == 2
         assert AuditAction.CURATOR_OFFBOARDED in actions
@@ -940,6 +947,7 @@ def test_group_reassignment_changes_permissions_and_rejects_invalid_curators(
         persisted_group = database.get(Group, group.id)
         assert can_update_group(database.get(User, previous.id), persisted_group) is False
         assert can_update_group(database.get(User, successor.id), persisted_group) is True
+        assert persisted_group.version == 2
 
 
 def test_owner_deactivates_unassigned_curator_and_revokes_sessions(
@@ -1155,6 +1163,47 @@ def test_concurrent_offboarding_and_reassignment_preserve_responsible_curator(
         assert persisted_curator.is_active is True
         if database.get(User, departing.id).is_active is False:
             assert persisted_group.curator_id != departing.id
+
+
+def test_stale_owner_reassignment_cannot_overwrite_newer_assignment(
+    user_management_context,
+) -> None:
+    client, factory = user_management_context
+    owner = add_user(client, factory, "owner", owner=True)
+    previous = add_user(client, factory, "previous")
+    first_successor = add_user(client, factory, "first.successor")
+    stale_successor = add_user(client, factory, "stale.successor")
+    group, _ = add_group_and_student(factory, previous)
+
+    with factory() as first_database, factory() as stale_database:
+        first_actor = first_database.get(User, owner.id)
+        stale_actor = stale_database.get(User, owner.id)
+        first_group = first_database.get(Group, group.id)
+        stale_group = stale_database.get(Group, group.id)
+        first_database.get(User, first_successor.id)
+        stale_database.get(User, stale_successor.id)
+        assert first_group.version == stale_group.version == 1
+
+        assign_group(first_database, first_actor, group.id, first_successor.id)
+        first_database.commit()
+
+        with pytest.raises(ApiError) as conflict:
+            assign_group(stale_database, stale_actor, group.id, stale_successor.id)
+
+        assert conflict.value.status_code == 409
+        assert conflict.value.code == "version_conflict"
+        stale_database.rollback()
+
+    with factory() as database:
+        persisted = database.get(Group, group.id)
+        assert persisted.curator_id == first_successor.id
+        assert persisted.version == 2
+        events = list(
+            database.scalars(
+                select(AuditEvent).where(AuditEvent.action == AuditAction.CURATOR_REASSIGNED)
+            )
+        )
+        assert len(events) == 1
 
 
 def test_concurrent_password_resets_leave_only_latest_credential_valid(

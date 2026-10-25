@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Index, String, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,6 +18,14 @@ class AuditAction(enum.StrEnum):
     CURATOR_REASSIGNED = "curator_reassigned"
     CURATOR_OFFBOARDED = "curator_offboarded"
     OWNER_TRANSFERRED = "owner_transferred"
+    GROUP_CREATED = "group_created"
+    GROUP_UPDATED = "group_updated"
+    GROUP_ARCHIVED = "group_archived"
+    GROUP_RESTORED = "group_restored"
+    STUDENT_CREATED = "student_created"
+    STUDENT_UPDATED = "student_updated"
+    STUDENT_ARCHIVED = "student_archived"
+    STUDENT_RESTORED = "student_restored"
 
 
 class AuditEvent(Base):
@@ -43,17 +51,7 @@ class AuditEvent(Base):
         String(36),
         ForeignKey("groups.id", ondelete="RESTRICT", onupdate="RESTRICT"),
     )
-    action: Mapped[AuditAction] = mapped_column(
-        Enum(
-            AuditAction,
-            name="audit_action",
-            native_enum=False,
-            create_constraint=True,
-            validate_strings=True,
-            values_callable=lambda values: [item.value for item in values],
-        ),
-        nullable=False,
-    )
+    action: Mapped[AuditAction] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

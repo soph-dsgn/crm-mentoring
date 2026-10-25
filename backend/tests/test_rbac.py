@@ -221,7 +221,7 @@ def test_reassignment_immediately_changes_update_permissions(session: Session) -
     graph = seed_access_graph(session)
     cohort = graph["assigned_group"]
 
-    reassign_group(graph["owner"], cohort, graph["other"])
+    reassign_group(graph["owner"], cohort, graph["other"], session)
     session.commit()
 
     assert not can_update_group(graph["assigned"], cohort)
@@ -234,12 +234,12 @@ def test_only_owner_can_reassign_to_an_active_admin(session: Session) -> None:
     student = make_user("student-target", UserRole.STUDENT)
 
     with pytest.raises(ApiError) as forbidden:
-        reassign_group(graph["assigned"], graph["assigned_group"], graph["other"])
+        reassign_group(graph["assigned"], graph["assigned_group"], graph["other"], session)
     assert forbidden.value.status_code == 403
 
     for invalid_target in (inactive_admin, student):
         with pytest.raises(ApiError) as invalid:
-            reassign_group(graph["owner"], graph["assigned_group"], invalid_target)
+            reassign_group(graph["owner"], graph["assigned_group"], invalid_target, session)
         assert invalid.value.status_code == 422
 
 
@@ -262,8 +262,8 @@ def test_deactivation_requires_reassignment_and_revokes_active_sessions(session:
         deactivate_user(graph["owner"], former_curator, session, now=now)
     assert orphaned.value.status_code == 409
 
-    reassign_group(graph["owner"], graph["assigned_group"], graph["other"])
-    reassign_group(graph["owner"], graph["second_assigned_group"], graph["other"])
+    reassign_group(graph["owner"], graph["assigned_group"], graph["other"], session)
+    reassign_group(graph["owner"], graph["second_assigned_group"], graph["other"], session)
     deactivate_user(graph["owner"], former_curator, session, now=now)
     session.commit()
 
