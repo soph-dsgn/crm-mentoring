@@ -236,7 +236,7 @@ h2, .section-head h2, .strategy-toolbar h2 { font-size: 24px; line-height: 32px;
   min-height: 100dvh;
   margin: 0;
   border-radius: 0;
-  background: linear-gradient(180deg, #e6f1ff 0, #edf4fc 112px, var(--ui-bg) 300px, var(--ui-bg) 100%);
+  background: var(--ui-bg);
   box-shadow: none;
 }
 .app-shell.overview-shell { min-height: 100dvh; }

@@ -16,7 +16,7 @@ out vec4 outColor;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 float noise(vec2 p){vec2 b=floor(p),f=fract(p);f=f*f*f*(f*(f*6.-15.)+10.);return mix(mix(hash(vec3(b,0.)),hash(vec3(b+vec2(1,0),0.)),f.x),mix(hash(vec3(b+vec2(0,1),0.)),hash(vec3(b+1.,0.)),f.x),f.y);}
 float glow(float d,float peak,float shoulder,float edge){if(d<.42)return mix(peak,shoulder,d/.42);return shoulder*(1.-smoothstep(.42,edge,d));}
-void main(){vec2 uv=vec2(vUv.x,1.-vUv.y);float t=uTime*.16;bool mobile=uViewport.x<768.;vec2 p=uv*vec2(2.1,1.55);vec2 warp=vec2(noise(p+vec2(t,-t*.4)),noise(p+vec2(7.2,3.1)-t*.6))-.5;vec2 fuv=uv+warp*vec2(.11,.07);vec2 lc=vec2(.44+sin(t-.8)*.31,-.05+sin(t*.7)*.03);vec2 rc=vec2(.58+sin(t+1.6)*.29,-.08+sin(t*.6)*.025);float l=glow(length((fuv-lc)/vec2(mobile?.92:.64,1.)),mobile?.21:.26,mobile?.085:.098,.88);float r=glow(length((fuv-rc)/vec2(mobile?.8:.59,.94)),.2,mobile?.068:.074,.84);vec3 c=mix(vec3(1.),vec3(.68,.85,1.),r);c=mix(c,vec3(.8,.9,1.),l);c=mix(c,vec3(1.),smoothstep(.7,1.,uv.y));outColor=vec4(clamp(c,0.,1.),1.);}`
+void main(){vec2 uv=vec2(vUv.x,1.-vUv.y);float t=uTime*.2;bool mobile=uViewport.x<768.;vec2 p=uv*vec2(2.1,1.55);vec2 warp=vec2(noise(p+vec2(t,-t*.45)),noise(p+vec2(7.2,3.1)-t*.72))-.5;vec2 fuv=uv+warp*vec2(.14,.09);vec2 lc=vec2(.44+sin(t-.8)*.34,-.05+sin(t*.72)*.04);vec2 rc=vec2(.58+sin(t+1.6)*.33,-.08+sin(t*.82+1.1)*.035);float l=glow(length((fuv-lc)/vec2(mobile?.92:.64,1.)),mobile?.27:.32,mobile?.105:.12,.9);float r=glow(length((fuv-rc)/vec2(mobile?.8:.59,.94)),.28,mobile?.09:.1,.86);float total=l+r;float wave=max(l,r)+min(l,r)*.35;float fade=1.-smoothstep(.64,1.,uv.y);float alpha=clamp(wave*1.12*fade,0.,.38);vec3 blue=mix(vec3(.34,.68,1.),vec3(.5,.77,1.),l/(total+.0001));outColor=vec4(blue,alpha);}`
 
 const compile=(gl:WebGL2RenderingContext,type:number,source:string)=>{const shader=gl.createShader(type);if(!shader)throw new Error('WebGL shader unavailable');gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){const message=gl.getShaderInfoLog(shader)||'WebGL shader failed';gl.deleteShader(shader);throw new Error(message)}return shader}
 
@@ -28,7 +28,7 @@ export function FlowBackground({className=''}:{className?:string}) {
     if(!canvas)return
     const motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)')
     if(reduced){canvas.dataset.motion='still';canvas.dataset.renderer='fallback';return}
-    const gl=canvas.getContext('webgl2',{alpha:true,antialias:false,powerPreference:'low-power'})
+    const gl=canvas.getContext('webgl2',{alpha:true,premultipliedAlpha:false,antialias:false,powerPreference:'low-power'})
     if(!gl){canvas.dataset.renderer='fallback';return}
     let program:WebGLProgram|null=null,buffer:WebGLBuffer|null=null,timeUniform:WebGLUniformLocation|null=null,viewportUniform:WebGLUniformLocation|null=null,frame=0,last=0,elapsed=0,visible=false,lost=false
     const stop=()=>{cancelAnimationFrame(frame);frame=0;last=0}
