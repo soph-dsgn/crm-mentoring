@@ -26,6 +26,17 @@ class AuditAction(enum.StrEnum):
     STUDENT_UPDATED = "student_updated"
     STUDENT_ARCHIVED = "student_archived"
     STUDENT_RESTORED = "student_restored"
+    STRATEGY_CREATED = "strategy_created"
+    SECTION_CREATED = "section_created"
+    SECTION_UPDATED = "section_updated"
+    SECTIONS_REORDERED = "sections_reordered"
+    TASK_CREATED = "task_created"
+    TASK_UPDATED = "task_updated"
+    TASK_STATUS_CHANGED = "task_status_changed"
+    TASK_ARCHIVED = "task_archived"
+    TASK_RESTORED = "task_restored"
+    APPROVAL_CREATED = "approval_created"
+    APPROVAL_CHANGED = "approval_changed"
 
 
 class AuditEvent(Base):

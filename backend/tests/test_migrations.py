@@ -8,6 +8,8 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
+from app.db.session import build_engine
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -31,11 +33,16 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
         inspector = inspect(engine)
         assert set(inspector.get_table_names()) == {
             "alembic_version",
+            "anya_approvals",
             "audit_events",
             "auth_sessions",
             "groups",
             "login_attempts",
+            "strategies",
+            "strategy_sections",
+            "strategy_tasks",
             "students",
+            "task_history",
             "users",
         }
         assert {column["name"] for column in inspector.get_columns("users")} >= {"normalized_login"}
@@ -249,6 +256,153 @@ def test_auth_migration_login_conflict_leaves_domain_schema_unchanged(tmp_path: 
             )
     finally:
         inspected_engine.dispose()
+
+
+def test_strategies_migration_preserves_domain_data_and_enforces_history(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "strategies-migration.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "20261025_0005")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO users (
+                        id, login, normalized_login, role, password_hash,
+                        must_change_password, is_active, is_owner
+                    ) VALUES ('owner', 'owner', 'owner', 'admin', 'hash', 0, 1, 1)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO groups (
+                        id, curator_id, curator_role, name, starts_at, status
+                    ) VALUES ('group', 'owner', 'admin', 'Group', '2026-01-01', 'active')
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO students (id, group_id, name, user_role, stage)
+                    VALUES ('student', 'group', 'Student', 'student', 'start')
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO students (id, group_id, name, user_role, stage)
+                    VALUES ('student-2', 'group', 'Student 2', 'student', 'start')
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+    upgraded = build_engine(database_url)
+    try:
+        with upgraded.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO strategies (id, student_id) VALUES ('strategy', 'student');
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO strategy_sections (id, strategy_id, title, position)
+                    VALUES ('section', 'strategy', 'Section', 0)
+                    """
+                )
+            )
+            connection.execute(
+                text("INSERT INTO strategies (id, student_id) VALUES ('strategy-2', 'student-2')")
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO strategy_sections (id, strategy_id, title, position)
+                    VALUES ('section-2', 'strategy-2', 'Section 2', 0)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO strategy_tasks (
+                        id, strategy_id, section_id, title, position
+                    ) VALUES ('task', 'strategy', 'section', 'Task', 0)
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO task_history (id, task_id, actor_user_id, event_type)
+                    VALUES ('history', 'task', 'owner', 'task_created')
+                    """
+                )
+            )
+        assert inspect(upgraded).get_unique_constraints("strategies")
+        with (
+            pytest.raises(IntegrityError, match="task_history_append_only"),
+            upgraded.begin() as connection,
+        ):
+            connection.execute(
+                text("UPDATE task_history SET event_type = 'changed' WHERE id = 'history'")
+            )
+        with (
+            pytest.raises(IntegrityError, match="non_negative_task_position"),
+            upgraded.begin() as connection,
+        ):
+            connection.execute(text("UPDATE strategy_tasks SET position = -1 WHERE id = 'task'"))
+        with (
+            pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"),
+            upgraded.begin() as connection,
+        ):
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO strategy_tasks (
+                        id, strategy_id, section_id, title, position
+                    ) VALUES ('cross-task', 'strategy', 'section-2', 'Cross', 1)
+                    """
+                )
+            )
+        with (
+            pytest.raises(IntegrityError, match="task_history_append_only"),
+            upgraded.begin() as connection,
+        ):
+            connection.execute(text("DELETE FROM task_history WHERE id = 'history'"))
+        with upgraded.connect() as connection:
+            assert connection.scalar(text("SELECT name FROM students WHERE id = 'student'")) == (
+                "Student"
+            )
+            assert connection.scalar(text("SELECT event_type FROM task_history")) == "task_created"
+    finally:
+        upgraded.dispose()
+
+    command.downgrade(config, "20261025_0005")
+    downgraded = create_engine(database_url)
+    try:
+        tables = inspect(downgraded).get_table_names()
+        assert "strategies" not in tables
+        with downgraded.connect() as connection:
+            assert connection.scalar(text("SELECT name FROM students WHERE id = 'student'")) == (
+                "Student"
+            )
+    finally:
+        downgraded.dispose()
 
 
 def test_owner_guard_migration_preserves_one_owner_under_concurrent_updates(

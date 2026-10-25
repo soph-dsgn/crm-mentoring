@@ -1,1 +1,1 @@
-"""Strategies, sections, tasks, and approvals (planned)."""
+"""Individual learning strategies domain."""
