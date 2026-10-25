@@ -45,6 +45,19 @@ def raise_integrity_conflict(database: Session, error: IntegrityError) -> None:
         ),
         ("active_curator_required", "invalid_curator", "Curator must be an active admin", 422),
         ("group_archived", "group_archived", "Cannot create a student in an archived group", 409),
+        ("strategies.student_id", "strategy_exists", "Student already has a strategy", 409),
+        (
+            "strategy_sections.strategy_id, strategy_sections.position",
+            "position_conflict",
+            "Section position is already in use",
+            409,
+        ),
+        (
+            "strategy_tasks.section_id, strategy_tasks.position",
+            "position_conflict",
+            "Task position is already in use",
+            409,
+        ),
     )
     for marker, code, public_message, status_code in mappings:
         if marker in message:

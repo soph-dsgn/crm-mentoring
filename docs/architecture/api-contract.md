@@ -75,16 +75,26 @@ cursor. Групповой список учениц доступен тольк
 |---|---|---|
 | GET | `/api/v1/students/{id}/strategy` | единственная стратегия ученика |
 | POST | `/api/v1/students/{id}/strategy` | создать стратегию ученика |
-| POST/PATCH | `/api/v1/strategies/{id}/sections` | добавить / изменить порядок разделов |
-| POST | `/api/v1/strategies/{id}/tasks` | создать задачу |
-| GET/PATCH | `/api/v1/tasks/{id}` | читать / редактировать задачу |
-| POST | `/api/v1/tasks/{id}/status-transitions` | валидируемый переход статуса |
-| PUT | `/api/v1/tasks/{id}/anya-approval` | изменить отдельный цикл согласования |
+| GET/POST | `/api/v1/strategies/{id}/sections` | список / добавить раздел |
+| POST | `/api/v1/strategies/{id}/sections/reorder` | атомарно изменить порядок всех разделов |
+| PATCH | `/api/v1/strategy-sections/{id}` | переименовать раздел по `expected_version` |
+| GET/POST | `/api/v1/strategy-sections/{id}/tasks` | список / добавить задачу |
+| POST | `/api/v1/strategy-sections/{id}/tasks/reorder` | атомарно изменить порядок всех задач раздела |
+| GET/PATCH | `/api/v1/strategy-tasks/{id}` | читать / редактировать задачу |
+| POST | `/api/v1/strategy-tasks/{id}/study-status` | валидируемый переход статуса выполнения |
+| POST | `/api/v1/strategy-tasks/{id}/archive` | архивировать задачу без удаления |
+| POST | `/api/v1/strategy-tasks/{id}/restore` | восстановить архивную задачу |
+| GET | `/api/v1/strategy-tasks/{id}/history` | append-only история задачи |
+| GET/POST | `/api/v1/strategy-tasks/{id}/approval` | прочитать / создать согласование с Аней |
+| POST | `/api/v1/strategy-tasks/{id}/approval/transition` | валидируемая команда согласования |
 | GET/POST | `/api/v1/strategies/{id}/homeworks` | история / черновик из выбранных задач |
 | GET/PATCH | `/api/v1/homeworks/{id}` | карточка / допустимые поля текущего состояния |
 | POST | `/api/v1/homeworks/{id}/transitions` | issue, submit, return, accept |
 
-Переходы оформляются командами, а не произвольным PATCH статуса: сервис должен атомарно обновить Homework, связанные задачи, историю и progress. Ответ включает обновлённые ресурсы либо их версии.
+Статус выполнения и согласование с Аней меняются отдельными командами, а не произвольным PATCH.
+Они имеют независимые lifecycle и версии. `period_text` остаётся пояснительным текстом и не
+участвует в расчёте дедлайна. История хранит тип события, actor и безопасные технические детали,
+но не дублирует полные тексты комментариев. Homework-маршруты остаются будущим этапом.
 
 ## Импорт, экспорт и файлы
 
