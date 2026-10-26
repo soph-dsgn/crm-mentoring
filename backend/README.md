@@ -80,7 +80,8 @@ same-origin, проверяют текущее назначение курато
 ## Требования
 
 - Python 3.13+
-- SQLite 3 (входит в стандартную поставку CPython)
+- SQLite 3 (входит в стандартную поставку CPython) для локальной разработки
+- PostgreSQL 18 для production
 
 Заявленная совместимость основных зависимостей с Python 3.13 проверена по метаданным PyPI и отдельным разрешением бинарных пакетов для CPython 3.13 на Windows.
 
@@ -106,6 +107,34 @@ uvicorn app.main:app --reload
 - health check: `http://127.0.0.1:8000/health`
 - OpenAPI: `http://127.0.0.1:8000/docs`
 
+## PostgreSQL 18
+
+Приложение использует Psycopg 3 и тот же SQLAlchemy/Alembic stack. Создайте пустую базу и
+отдельного пользователя с правами на её schema, затем задайте URL только через окружение:
+
+```text
+KURATORSKAYA_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
+KURATORSKAYA_DATABASE_POOL_SIZE=3
+KURATORSKAYA_DATABASE_MAX_OVERFLOW=1
+KURATORSKAYA_DATABASE_POOL_TIMEOUT_SECONDS=30
+```
+
+TLS-параметры зависят от сервера; production URL не должен отключать проверку TLS. После создания
+пустой базы выполните `alembic upgrade head`, `alembic current` и `alembic check`. Миграция
+`20261026_0008` устанавливает PostgreSQL triggers для active owner/curator, запрета создания
+ученицы в архивной группе, cross-strategy HomeworkItem и неизменяемой истории.
+
+Локальный integration test требует отдельную disposable PostgreSQL 18 базу:
+
+```powershell
+$env:KURATORSKAYA_TEST_POSTGRES_URL='postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/crm_test'
+pytest tests/test_postgresql.py --no-cov
+```
+
+Имя disposable-базы должно оканчиваться на `_test`. Тест очищает schema `public`; не указывайте
+рабочую или общую базу. Покрытие измеряется полным `pytest`. SQLite остаётся вариантом по умолчанию
+и продолжает использовать собственные triggers и `PRAGMA foreign_keys=ON`.
+
 ## Проверки
 
 ```powershell
@@ -116,7 +145,8 @@ alembic current
 alembic check
 ```
 
-SQLite-файл по умолчанию создаётся как `backend/kuratorskaya.db` и игнорируется Git. Транзакционные
-и конкурентные гарантии этого этапа проверены на SQLite. PostgreSQL-драйвер и эквивалентная защита
-инварианта последнего owner должны быть отдельно реализованы и проверены при выборе production СУБД.
+SQLite-файл по умолчанию создаётся как `backend/kuratorskaya.db` и игнорируется Git. PostgreSQL
+проверяется отдельными migration/integrity/concurrency tests на реальном PostgreSQL 18. Проверенные
+гарантии относятся к стандартному уровню изоляции `READ COMMITTED`; приложение упорядочивает
+конкурирующие изменения optimistic versions, conditional updates и database triggers.
 

@@ -120,6 +120,8 @@ def upgrade() -> None:
             type_=sa.String(length=64),
             existing_nullable=False,
         )
+    if op.get_bind().dialect.name != "sqlite":
+        return
     op.execute(
         """
         CREATE TRIGGER trg_students_reject_archived_group_insert
@@ -138,7 +140,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     _validate_audit_actions_for_downgrade()
-    op.execute("DROP TRIGGER IF EXISTS trg_students_reject_archived_group_insert")
+    is_sqlite = op.get_bind().dialect.name == "sqlite"
+    if is_sqlite:
+        op.execute("DROP TRIGGER IF EXISTS trg_students_reject_archived_group_insert")
     old_type = sa.Enum(
         *OLD_AUDIT_ACTIONS,
         name="audit_action",
@@ -157,7 +161,9 @@ def downgrade() -> None:
     # SQLite batch mode rebuilds the table. Drop triggers that reference
     # ``groups`` before the temporary table swap, then restore the exact
     # guards owned by revision 0004 for the downgraded schema.
-    _drop_curator_triggers()
+    if is_sqlite:
+        _drop_curator_triggers()
     with op.batch_alter_table("groups") as batch_op:
         batch_op.drop_column("version")
-    _create_curator_triggers()
+    if is_sqlite:
+        _create_curator_triggers()

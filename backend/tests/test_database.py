@@ -24,3 +24,13 @@ def test_sqlite_foreign_keys_are_enabled_for_every_connection(tmp_path: Path) ->
             assert second_connection.scalar(text("PRAGMA foreign_keys")) == 1
     finally:
         engine.dispose()
+
+
+def test_postgresql_engine_uses_conservative_pool_defaults() -> None:
+    engine = build_engine("postgresql+psycopg://user:password@db.example/test")
+    try:
+        assert engine.pool.size() == 3
+        assert engine.pool._max_overflow == 1
+        assert engine.pool._timeout == 30
+    finally:
+        engine.dispose()

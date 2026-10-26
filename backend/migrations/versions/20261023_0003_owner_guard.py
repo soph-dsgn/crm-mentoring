@@ -16,6 +16,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    if op.get_bind().dialect.name != "sqlite":
+        return
     op.execute(
         """
         CREATE TRIGGER trg_users_preserve_active_owner_update
@@ -60,5 +62,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name != "sqlite":
+        return
     op.execute("DROP TRIGGER IF EXISTS trg_users_preserve_active_owner_delete")
     op.execute("DROP TRIGGER IF EXISTS trg_users_preserve_active_owner_update")
