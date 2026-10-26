@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
     debug: bool = False
     database_url: str = "sqlite+pysqlite:///./kuratorskaya.db"
+    database_pool_size: int = Field(default=3, ge=1, le=10)
+    database_max_overflow: int = Field(default=1, ge=0, le=10)
+    database_pool_timeout_seconds: int = Field(default=30, gt=0, le=120)
     auth_password_min_length: int = Field(default=12, ge=12)
     auth_argon2_time_cost: int = Field(default=3, gt=0)
     auth_argon2_memory_cost: int = Field(default=65536, ge=1024)

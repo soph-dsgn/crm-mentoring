@@ -23,7 +23,7 @@ def _validate_active_group_curators() -> None:
             SELECT groups.id
             FROM groups
             JOIN users ON users.id = groups.curator_id
-            WHERE users.role != 'admin' OR users.is_active != 1
+            WHERE users.role != 'admin' OR users.is_active IS NOT TRUE
             LIMIT 1
             """
         )
@@ -98,6 +98,8 @@ def upgrade() -> None:
         ["action", "created_at"],
         unique=False,
     )
+    if op.get_bind().dialect.name != "sqlite":
+        return
     op.execute(
         """
         CREATE TRIGGER trg_groups_require_active_curator_insert
@@ -149,9 +151,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS trg_users_preserve_group_curator_update")
-    op.execute("DROP TRIGGER IF EXISTS trg_groups_require_active_curator_update")
-    op.execute("DROP TRIGGER IF EXISTS trg_groups_require_active_curator_insert")
+    if op.get_bind().dialect.name == "sqlite":
+        op.execute("DROP TRIGGER IF EXISTS trg_users_preserve_group_curator_update")
+        op.execute("DROP TRIGGER IF EXISTS trg_groups_require_active_curator_update")
+        op.execute("DROP TRIGGER IF EXISTS trg_groups_require_active_curator_insert")
     op.drop_index("ix_audit_events_action_created_at", table_name="audit_events")
     op.drop_index("ix_audit_events_target_group_id", table_name="audit_events")
     op.drop_index("ix_audit_events_target_user_id", table_name="audit_events")

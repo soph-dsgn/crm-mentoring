@@ -281,7 +281,7 @@ def _update_tasks_for_review(
         HomeworkStatus.REVISION: "homework_revision_requested",
         HomeworkStatus.ACCEPTED: "homework_accepted",
     }[target]
-    for item in homework.items:
+    for item in sorted(homework.items, key=lambda item: item.task_id):
         task = item.task
         revision_history = exists(
             select(HomeworkHistory.id).where(

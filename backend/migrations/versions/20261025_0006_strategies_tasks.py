@@ -155,6 +155,8 @@ def upgrade() -> None:
         sa.UniqueConstraint("task_id"),
     )
     op.create_index("ix_anya_approvals_status", "anya_approvals", ["status"], unique=False)
+    if op.get_bind().dialect.name != "sqlite":
+        return
     op.execute(
         """
         CREATE TRIGGER trg_task_history_append_only_update
@@ -176,8 +178,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS trg_task_history_append_only_delete")
-    op.execute("DROP TRIGGER IF EXISTS trg_task_history_append_only_update")
+    if op.get_bind().dialect.name == "sqlite":
+        op.execute("DROP TRIGGER IF EXISTS trg_task_history_append_only_delete")
+        op.execute("DROP TRIGGER IF EXISTS trg_task_history_append_only_update")
     op.drop_index("ix_anya_approvals_status", table_name="anya_approvals")
     op.drop_table("anya_approvals")
     op.drop_index("ix_task_history_task_created", table_name="task_history")

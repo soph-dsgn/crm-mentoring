@@ -192,6 +192,8 @@ def upgrade() -> None:
         unique=False,
     )
 
+    if op.get_bind().dialect.name != "sqlite":
+        return
     op.execute(
         """
         CREATE TRIGGER trg_homework_items_strategy_insert
@@ -224,10 +226,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for table in ("homework_history", "homework_items"):
-        op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_append_only_delete")
-        op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_append_only_update")
-    op.execute("DROP TRIGGER IF EXISTS trg_homework_items_strategy_insert")
+    if op.get_bind().dialect.name == "sqlite":
+        for table in ("homework_history", "homework_items"):
+            op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_append_only_delete")
+            op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_append_only_update")
+        op.execute("DROP TRIGGER IF EXISTS trg_homework_items_strategy_insert")
     op.drop_index("ix_homework_history_homework_created", table_name="homework_history")
     op.drop_index("ix_homework_history_actor_user_id", table_name="homework_history")
     op.drop_table("homework_history")

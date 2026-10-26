@@ -95,7 +95,8 @@ optimistic version и soft archive. Активное состояние UI вс�
 - `status_before_archive` восстанавливает ручной lifecycle группы, `Student.archived_at` не
   деактивирует связанный аккаунт;
 - исторические и принятые данные удаляются мягко либо архивируются;
-- снимки `HomeworkItem` и `HomeworkHistory` запрещено изменять или удалять SQLite triggers;
+- снимки `HomeworkItem`, `TaskHistory` и `HomeworkHistory` запрещено изменять или удалять
+  dialect-aware triggers в SQLite и PostgreSQL;
 - повторная или устаревшая lifecycle-команда завершается конфликтом и не дублирует эффекты;
 - timestamps хранятся в UTC, календарные даты — типом `date` без timezone;
 - внешние legacy ID сохраняются в таблице соответствий импорта, а не становятся бизнес-ключами.

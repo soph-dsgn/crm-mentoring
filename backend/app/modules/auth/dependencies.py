@@ -21,6 +21,12 @@ def utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
 def hash_secret(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -47,12 +53,14 @@ def resolve_auth_context(request: Request, database: Session) -> AuthContext | N
     )
     if auth_session is None:
         return None
-    now = request_now(request)
-    idle_deadline = auth_session.last_activity_at + timedelta(days=settings.auth_session_idle_days)
+    now = _naive_utc(request_now(request))
+    idle_deadline = _naive_utc(auth_session.last_activity_at) + timedelta(
+        days=settings.auth_session_idle_days
+    )
     if (
         auth_session.revoked_at is not None
         or now >= idle_deadline
-        or now >= auth_session.absolute_expires_at
+        or now >= _naive_utc(auth_session.absolute_expires_at)
     ):
         return None
     user = database.get(User, auth_session.user_id)
