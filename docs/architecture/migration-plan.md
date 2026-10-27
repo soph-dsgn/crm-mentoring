@@ -30,13 +30,15 @@
 ### 3. Преобразование
 
 - `Group` → group с `legacy_id` mapping;
-- каждый legacy `Student(groupId)` → user + `Student` с обязательным `group_id` + strategy;
+- каждый legacy `Student(groupId)` → `Student` с обязательным `group_id` + strategy; аккаунт не
+  создаётся и позже привязывается только через User Management;
 - одинаковые имена в разных группах не считать одним учеником и не объединять автоматически;
 - sections/tasks → соответствующая strategy с сохранением порядка, source file и history;
 - старый `status` сохранить в raw import record, канонический `study_status` получить по тем же правилам, что `normalizeData`;
 - approval переносить отдельно от homework review;
 - HomeworkItem переносить как snapshot плюс FK к задаче; Meetings не терять;
-- knowledge импортировать отдельным job с сохранением `sourceId`, hash и признаков пользовательской правки.
+- knowledge остаётся отдельным IndexedDB export. Серверной `KnowledgeRecord` модели пока нет,
+  поэтому AppData import явно сообщает этот gap и не заявляет перенос базы знаний.
 
 ### 4. Транзакционный импорт
 

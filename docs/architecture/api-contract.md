@@ -116,3 +116,10 @@ cursor. Групповой список учениц доступен тольк
 
 Загрузку файлов и submission API проектируем, но не реализуем в текущем этапе. Исходные PDF должны импортироваться административным job/CLI с отчётом, а не публичным пользовательским endpoint.
 
+Legacy endpoints доступны только active owner. Запрос import содержит `source` (сырой AppData),
+`curator_assignments`, а подтверждённый import дополнительно — `confirm=true` и checksum из
+validate-only ответа. Validate-only не создаёт audit/import records. Повтор checksum возвращает
+результат исходного `ImportRun`, а конфликт с существующими business records блокирует импорт.
+Размер request ограничен 5 MiB. Backup version 1 исключает auth secrets и требует отдельного
+экспорта IndexedDB knowledge.
+

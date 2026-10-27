@@ -3,6 +3,7 @@
 from app.modules.auth.models import AuthSession, LoginAttempt
 from app.modules.groups.models import Group, GroupStatus
 from app.modules.homeworks.models import Homework, HomeworkHistory, HomeworkItem, HomeworkStatus
+from app.modules.legacy_io.models import ImportRun, LegacyIdMapping
 from app.modules.meetings.models import Meeting
 from app.modules.strategies.models import (
     AnyaApproval,
@@ -28,6 +29,8 @@ __all__ = [
     "HomeworkHistory",
     "HomeworkItem",
     "HomeworkStatus",
+    "ImportRun",
+    "LegacyIdMapping",
     "LoginAttempt",
     "Meeting",
     "Student",

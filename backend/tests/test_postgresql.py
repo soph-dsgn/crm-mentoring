@@ -1,14 +1,16 @@
 import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from pathlib import Path
 from threading import Barrier
+from threading import Event as ThreadEvent
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, event, func, inspect, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -16,8 +18,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import Settings
 from app.db.session import build_engine, get_db
 from app.main import create_app
+from app.modules.groups.models import Group, GroupStatus
+from app.modules.legacy_io.models import ImportRun
+from app.modules.legacy_io.service import restore_backup
 from app.modules.strategies.models import StrategyTask
+from app.modules.students.models import Student
+from app.modules.users.models import User, UserRole
 from tests import test_groups_students_api as group_cases
+from tests import test_legacy_import_export as import_cases
 from tests import test_meetings_homeworks_api as homework_cases
 from tests import test_strategies_tasks_api as strategy_cases
 from tests import test_user_management_api as user_cases
@@ -49,13 +57,17 @@ def test_postgresql_test_url_must_name_disposable_database() -> None:
         )
 
 
-def _alembic_config() -> Config:
-    assert POSTGRES_URL is not None
+def _alembic_config_for(database_url: str) -> Config:
     config = Config(BACKEND_DIR / "alembic.ini")
     config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
-    config.set_main_option("sqlalchemy.url", POSTGRES_URL.replace("%", "%%"))
-    config.attributes["database_url"] = POSTGRES_URL
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    config.attributes["database_url"] = database_url
     return config
+
+
+def _alembic_config() -> Config:
+    assert POSTGRES_URL is not None
+    return _alembic_config_for(POSTGRES_URL)
 
 
 @pytest.fixture(autouse=True)
@@ -93,6 +105,8 @@ def test_postgresql_clean_upgrade_metadata_and_downgrade() -> None:
             "homeworks",
             "homework_items",
             "homework_history",
+            "import_runs",
+            "legacy_id_mappings",
         }
     finally:
         engine.dispose()
@@ -108,7 +122,7 @@ def test_postgresql_clean_upgrade_metadata_and_downgrade() -> None:
 def test_postgresql_upgrade_from_previous_head_preserves_existing_data() -> None:
     assert POSTGRES_URL is not None
     config = _alembic_config()
-    command.upgrade(config, "20261026_0007")
+    command.upgrade(config, "20261026_0008")
     engine = create_engine(POSTGRES_URL)
     try:
         with engine.begin() as connection:
@@ -150,7 +164,7 @@ def test_postgresql_upgrade_from_previous_head_preserves_existing_data() -> None
                 "Student"
             )
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "20261026_0008"
+                "20261028_0009"
             )
     finally:
         engine.dispose()
@@ -240,6 +254,138 @@ def test_postgresql_shared_task_review_is_serialized(
     postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     homework_cases.test_concurrent_homeworks_cannot_review_the_same_task(postgresql_learning_api)
+
+
+def test_postgresql_legacy_import_is_concurrently_idempotent(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    import_cases.test_concurrent_identical_import_is_idempotent(postgresql_learning_api)
+
+
+def test_postgresql_legacy_import_authorization_and_csrf(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    import_cases.test_validate_is_owner_only_and_writes_nothing(postgresql_learning_api)
+
+
+def test_postgresql_legacy_import_rolls_back_after_audit_failure(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]], monkeypatch
+) -> None:
+    import_cases.test_failure_after_writes_rolls_back_entities_and_import_run(
+        postgresql_learning_api, monkeypatch
+    )
+
+
+def test_postgresql_export_uses_one_repeatable_read_snapshot(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    client, factory = postgresql_learning_api
+    owner = import_cases.add_user(client, factory, "export-owner", owner=True)
+    group = Group(
+        curator_id=owner.id,
+        curator_role=UserRole.ADMIN,
+        name="Export group",
+        starts_at=date(2026, 1, 1),
+        status=GroupStatus.ACTIVE,
+    )
+    with factory.begin() as database:
+        database.add(group)
+    headers = import_cases.authenticate(client, owner.login)
+    engine = factory.kw["bind"]
+    group_selected = ThreadEvent()
+    continue_export = ThreadEvent()
+    blocked = False
+
+    def pause_after_group_select(*args) -> None:
+        nonlocal blocked
+        statement = args[2]
+        if not blocked and "FROM groups" in statement:
+            blocked = True
+            group_selected.set()
+            assert continue_export.wait(10)
+
+    event.listen(engine, "after_cursor_execute", pause_after_group_select)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(client.get, "/api/v1/exports/backup", headers=headers)
+            assert group_selected.wait(10)
+            with factory.begin() as database:
+                database.add(Student(group_id=group.id, name="Concurrent student"))
+            continue_export.set()
+            response = future.result(timeout=10)
+    finally:
+        continue_export.set()
+        event.remove(engine, "after_cursor_execute", pause_after_group_select)
+
+    assert response.status_code == 200
+    assert len(response.json()["data"]["groups"]) == 1
+    assert response.json()["data"]["students"] == []
+    with factory() as database:
+        assert database.scalar(select(func.count(Student.id))) == 1
+
+
+def test_postgresql_logical_backup_restore_and_downgrade(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    assert POSTGRES_URL is not None
+    client, factory = postgresql_learning_api
+    owner = import_cases.add_user(client, factory, "restore-owner", owner=True)
+    headers = import_cases.authenticate(client, owner.login)
+    body = import_cases.request_body(owner.id)
+    preview = client.post("/api/v1/imports/legacy/validate", json=body, headers=headers).json()
+    imported = client.post(
+        "/api/v1/imports/legacy",
+        json={**body, "confirm": True, "confirmation_checksum": preview["checksum"]},
+        headers=headers,
+    )
+    assert imported.status_code == 201
+    backup = client.get("/api/v1/exports/backup", headers=headers).json()
+
+    restore_url = (
+        make_url(POSTGRES_URL)
+        .set(database="crm_legacy_restore_test")
+        .render_as_string(hide_password=False)
+    )
+    restore_config = _alembic_config_for(restore_url)
+    restore_engine = create_engine(restore_url)
+    try:
+        with restore_engine.begin() as connection:
+            connection.execute(text("DROP SCHEMA public CASCADE"))
+            connection.execute(text("CREATE SCHEMA public"))
+        command.upgrade(restore_config, "head")
+        with Session(restore_engine) as database:
+            with pytest.raises(ValueError, match="matching users"):
+                restore_backup(database, backup)
+            database.rollback()
+            assert database.scalar(select(func.count(Group.id))) == 0
+        with Session(restore_engine) as database, database.begin():
+            database.add(
+                User(
+                    id=owner.id,
+                    login="restore-owner",
+                    role=UserRole.ADMIN,
+                    password_hash="synthetic-test-hash",
+                    is_owner=True,
+                    is_active=True,
+                    must_change_password=True,
+                )
+            )
+        with Session(restore_engine) as database, database.begin():
+            counts = restore_backup(database, backup)
+            assert counts["groups"] == 1
+            assert counts["homework_items"] == 1
+        with Session(restore_engine) as database:
+            assert database.scalar(select(func.count(Group.id))) == 1
+            assert database.scalar(select(func.count(ImportRun.id))) == 1
+        command.check(restore_config)
+        with restore_engine.begin() as connection:
+            connection.execute(text("DROP SCHEMA public CASCADE"))
+            connection.execute(text("CREATE SCHEMA public"))
+        command.upgrade(restore_config, "head")
+        command.downgrade(restore_config, "base")
+        assert inspect(restore_engine).get_table_names() == ["alembic_version"]
+    finally:
+        restore_engine.dispose()
 
 
 def test_postgresql_shared_tasks_use_consistent_lock_order(
