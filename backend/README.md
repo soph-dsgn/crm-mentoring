@@ -150,3 +150,25 @@ SQLite-файл по умолчанию создаётся как `backend/kurat
 гарантии относятся к стандартному уровню изоляции `READ COMMITTED`; приложение упорядочивает
 конкурирующие изменения optimistic versions, conditional updates и database triggers.
 
+## Legacy import и logical backup
+
+Owner сначала выполняет `POST /api/v1/imports/legacy/validate`, затем подтверждает тот же
+canonical SHA-256 через `POST /api/v1/imports/legacy`. Оба POST требуют session, CSRF и
+same-origin. Запрос содержит исходный browser `AppData` версий 1–3 и явное соответствие каждой
+legacy-группы существующему active admin. Импорт не создаёт аккаунты учениц, не объединяет
+профили по имени и не перезаписывает существующие business records.
+
+`GET /api/v1/exports/backup` возвращает owner-only logical backup бизнес-таблиц без password
+hashes, сессий и CSRF secrets. Это не замена физического backup PostgreSQL. Восстановление
+разрешено только в пустую по business-данным disposable БД, где уже существуют пользователи с
+ID кураторов и historical actors:
+
+```powershell
+python -m app.cli.restore_backup backup.json `
+  --database-url sqlite+pysqlite:///./kuratorskaya_restore.db `
+  --confirm-empty-business-data
+```
+
+Для PostgreSQL имя целевой БД обязано заканчиваться `_restore` или `_test`. IndexedDB-база знаний
+не входит в AppData или server backup и экспортируется отдельно из браузера.
+

@@ -40,6 +40,8 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "homework_history",
             "homework_items",
             "homeworks",
+            "import_runs",
+            "legacy_id_mappings",
             "login_attempts",
             "meetings",
             "strategies",
@@ -48,6 +50,12 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "students",
             "task_history",
             "users",
+        }
+        assert {column["name"] for column in inspector.get_columns("import_runs")} >= {
+            "checksum",
+            "source_version",
+            "actor_user_id",
+            "counts",
         }
         assert {column["name"] for column in inspector.get_columns("users")} >= {"normalized_login"}
         assert {column["name"] for column in inspector.get_columns("groups")} >= {
