@@ -19,7 +19,9 @@
 
 | Метод | Путь | Назначение |
 |---|---|---|
-| GET | `/health` | liveness, реализован |
+| GET | `/health` | legacy alias liveness, реализован |
+| GET | `/health/live` | liveness без обращения к БД, реализован |
+| GET | `/health/ready` | readiness с лёгким `SELECT 1`, `503` при недоступной БД |
 | POST | `/api/v1/auth/login` | создать серверную сессию, реализован |
 | POST | `/api/v1/auth/logout` | отозвать текущую сессию, реализован |
 | GET | `/api/v1/auth/me` | текущий пользователь, реализован |

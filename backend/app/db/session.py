@@ -15,9 +15,16 @@ def build_engine(
     pool_size: int = 3,
     max_overflow: int = 1,
     pool_timeout: int = 30,
+    connect_timeout: int = 5,
 ) -> Engine:
     url = make_url(database_url)
-    connect_args = {"check_same_thread": False} if url.get_backend_name() == "sqlite" else {}
+    connect_args = (
+        {"check_same_thread": False}
+        if url.get_backend_name() == "sqlite"
+        else {"connect_timeout": connect_timeout}
+        if url.get_backend_name() == "postgresql"
+        else {}
+    )
     engine_options: dict[str, Any] = {}
     if url.get_backend_name() == "sqlite" and url.database in (None, "", ":memory:"):
         engine_options["poolclass"] = StaticPool
@@ -58,6 +65,7 @@ engine = build_engine(
     pool_size=settings.database_pool_size,
     max_overflow=settings.database_max_overflow,
     pool_timeout=settings.database_pool_timeout_seconds,
+    connect_timeout=settings.database_connect_timeout_seconds,
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
