@@ -104,7 +104,9 @@ uvicorn app.main:app --reload
 
 После запуска:
 
-- health check: `http://127.0.0.1:8000/health`
+- liveness: `http://127.0.0.1:8000/health/live`
+- readiness: `http://127.0.0.1:8000/health/ready`
+- legacy liveness alias: `http://127.0.0.1:8000/health`
 - OpenAPI: `http://127.0.0.1:8000/docs`
 
 ## PostgreSQL 18
@@ -117,6 +119,7 @@ KURATORSKAYA_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE?
 KURATORSKAYA_DATABASE_POOL_SIZE=3
 KURATORSKAYA_DATABASE_MAX_OVERFLOW=1
 KURATORSKAYA_DATABASE_POOL_TIMEOUT_SECONDS=30
+KURATORSKAYA_DATABASE_CONNECT_TIMEOUT_SECONDS=5
 ```
 
 TLS-параметры зависят от сервера; production URL не должен отключать проверку TLS. После создания
@@ -171,4 +174,17 @@ python -m app.cli.restore_backup backup.json `
 
 Для PostgreSQL имя целевой БД обязано заканчиваться `_restore` или `_test`. IndexedDB-база знаний
 не входит в AppData или server backup и экспортируется отдельно из браузера.
+
+## Production readiness
+
+При `KURATORSKAYA_ENVIRONMENT=production` приложение запускается только с PostgreSQL, выключенным
+debug, явными `KURATORSKAYA_PERMITTED_HOSTS` и HTTPS-origin в
+`KURATORSKAYA_FRONTEND_ORIGINS`. Wildcard host/origin запрещён, OpenAPI UI отключён, session и
+CSRF cookies получают `Secure` и `SameSite=Lax`. Forwarded headers принимаются только от IP из
+`KURATORSKAYA_TRUSTED_PROXY_IPS`; Uvicorn также должен запускаться с совпадающим точным
+`--forwarded-allow-ips`, либо с `--no-proxy-headers` без reverse proxy.
+
+Полный порядок первого запуска, bootstrap первого owner, operational PostgreSQL backup/restore и
+назначение health probes описаны в
+[`docs/architecture/production-readiness.md`](../docs/architecture/production-readiness.md).
 

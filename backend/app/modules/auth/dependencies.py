@@ -119,6 +119,8 @@ def require_same_origin(request: Request) -> None:
     if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
         raise ApiError(status.HTTP_403_FORBIDDEN, "cross_site_denied", "Cross-site request denied")
     origin = request.headers.get("Origin")
-    expected_origin = str(request.base_url).rstrip("/")
-    if origin and origin.rstrip("/") != expected_origin:
+    settings: Settings = request.app.state.settings
+    expected_origins = {str(request.base_url).rstrip("/")}
+    expected_origins.update(value.rstrip("/") for value in settings.frontend_origins)
+    if origin and origin.rstrip("/") not in expected_origins:
         raise ApiError(status.HTTP_403_FORBIDDEN, "cross_site_denied", "Cross-site request denied")
