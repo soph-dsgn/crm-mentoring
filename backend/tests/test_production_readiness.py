@@ -49,7 +49,9 @@ def test_insecure_production_settings_are_rejected(
         production_settings(**override)
 
 
-def test_development_defaults_remain_compatible() -> None:
+def test_development_defaults_remain_compatible(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("KURATORSKAYA_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("KURATORSKAYA_DATABASE_URL", raising=False)
     settings = Settings(_env_file=None)
 
     assert settings.environment == "development"
