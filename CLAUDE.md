@@ -5,3 +5,7 @@
 Для deployment дополнительно следуйте `docs/deployment/`: сначала read-only inventory, затем
 отдельное подтверждение каждой production-мутации, verification и rollback. Не выполняйте
 автономный restore, downgrade, broad Docker cleanup и не затрагивайте несвязанные сервисы.
+
+Для frontend-интеграции начните с `SOFIA_HANDOFF.md` и `docs/frontend-handoff/README.md`. Они
+содержат проверенные API/RBAC-контракты, roadmap, открытые backend gaps и правила cutover; перед
+реализацией всё равно сверяйте их с актуальными routes, schemas и tests.

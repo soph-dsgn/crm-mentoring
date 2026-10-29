@@ -102,3 +102,12 @@ docs: закрепить правила сообщений коммитов
 - Не выполняйте автономный production restore, silent schema downgrade, broad Docker cleanup или
   destructive command без актуального backup и повторной проверки target
 - Используйте runbooks из `docs/deployment/`; startup приложения не запускает migrations
+
+## Frontend integration handoff
+
+- Перед подключением React к backend начните с [`SOFIA_HANDOFF.md`](SOFIA_HANDOFF.md) и подробного
+  индекса [`docs/frontend-handoff/`](docs/frontend-handoff/README.md)
+- Сверяйте API, RBAC и открытые backend gaps с текущими routes/schemas/tests: handoff фиксирует
+  проверенную точку, но не заменяет аудит актуальной ветки
+- Следуйте инкрементальной roadmap и не смешивайте server cutover, KnowledgeData и несколько
+  крупных frontend workflows в одном Pull Request
