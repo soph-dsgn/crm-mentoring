@@ -91,3 +91,14 @@ feat(strategy): добавить выбор задач для домашнего
 fix(homework): сохранить статус проверки после перезагрузки
 docs: закрепить правила сообщений коммитов
 ```
+
+## Production deployment
+
+- Перед любой работой на production сначала выполняйте read-only inventory по
+  `docs/deployment/preflight.md` и сверяйте точный host, port, database, container и proxy target
+- Не изменяйте production без отдельного подтверждения оператора, verification plan и rollback plan
+- Не затрагивайте чужие контейнеры, сети, PostgreSQL databases, firewall или virtual hosts
+- Не выводите credentials, env-файлы, cookies, database URL и backup contents в команды, логи или Git
+- Не выполняйте автономный production restore, silent schema downgrade, broad Docker cleanup или
+  destructive command без актуального backup и повторной проверки target
+- Используйте runbooks из `docs/deployment/`; startup приложения не запускает migrations

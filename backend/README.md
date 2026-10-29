@@ -188,3 +188,13 @@ CSRF cookies получают `Secure` и `SameSite=Lax`. Forwarded headers пр
 назначение health probes описаны в
 [`docs/architecture/production-readiness.md`](../docs/architecture/production-readiness.md).
 
+## Container deployment handoff
+
+Production Dockerfiles, non-root runtime, resource limits, host PostgreSQL integration, first-run
+sequence, reverse proxy contract, operational backup и rollback описаны в
+[`docs/deployment/`](../docs/deployment/README.md). Baseline не требует Docker Compose и запускает
+один backend worker. Контейнер не применяет migrations автоматически.
+
+Frontend image публикует текущий статический Vite build, но React по-прежнему хранит CRM-данные в
+браузере и не интегрирован с backend API. Deployment package не меняет это ограничение.
+
