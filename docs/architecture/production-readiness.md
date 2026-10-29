@@ -1,7 +1,7 @@
 # Production readiness
 
-Документ описывает application contract. Реальный сервер, reverse proxy, firewall, секреты,
-расписание backup и мониторинг настраиваются отдельным Deployment Handoff.
+Документ описывает application contract. Интеграция с существующим сервером, reverse proxy,
+firewall, секретами и backup описана в [`docs/deployment/`](../deployment/README.md).
 
 ## Первый запуск
 
@@ -30,8 +30,9 @@
 
    Временный пароль показывается один раз после успешного commit. Его нельзя перенаправлять в файл,
    CI log или deployment log.
-5. Запустить FastAPI. Без reverse proxy использовать `--no-proxy-headers`. За proxy указывать в
-   Uvicorn только точные trusted proxy IP, совпадающие с `KURATORSKAYA_TRUSTED_PROXY_IPS`.
+5. Запустить FastAPI. Безопасный container baseline использует `--no-proxy-headers`, а reverse
+   proxy очищает `Forwarded`/`X-Forwarded-*`. Не включать proxy-header processing без отдельной
+   проверки прямого peer IP и согласованного application/Uvicorn trust contract.
 6. Проверить `/health/live` и `/health/ready`.
 7. Войти первым owner и немедленно сменить временный пароль. До смены бизнес-операции запрещены.
 
