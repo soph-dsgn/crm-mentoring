@@ -8,7 +8,8 @@
     "lint": "eslint src scripts eslint.config.js --max-warnings 0",
     "build": "tsc -b && vite build",
     "verify": "npm run verify:workflow",
-    "verify:workflow": "node scripts/verify-workflow.mjs",
+    "verify:auth": "node scripts/verify-auth.mjs",
+    "verify:workflow": "node scripts/verify-workflow.mjs && node scripts/verify-auth.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpenIcon as BookOpen, ClipboardTextIcon as ClipboardList, DownloadIcon as Download, FileTextIcon as FileText, SquaresFourIcon as LayoutDashboard, MagnifyingGlassIcon as Search, SlidersHorizontalIcon as Settings2, SparkleIcon as Sparkles, UploadIcon as Upload, UsersIcon as Users } from '@phosphor-icons/react'
+import { BookOpenIcon as BookOpen, ClipboardTextIcon as ClipboardList, DownloadIcon as Download, FileTextIcon as FileText, SquaresFourIcon as LayoutDashboard, MagnifyingGlassIcon as Search, SignOutIcon as SignOut, SlidersHorizontalIcon as Settings2, SparkleIcon as Sparkles, UploadIcon as Upload, UsersIcon as Users } from '@phosphor-icons/react'
 import Select from './Select'
 import PlanOverview from './PlanOverview'
 import { GroupsPage, GroupDetailPage } from './GroupViews'
@@ -17,6 +17,7 @@ import { mergeStrategies } from './strategyImport'
 import { useCalmMotion } from './motion'
 import { ConfirmDialog, DeleteConfirmDialog, Dialog, NoticeDialog } from './Dialogs'
 import { FlowBackground } from './FlowBackground'
+import { useAuth, useCurrentUser } from './auth/authContext'
 
 type Page = 'overview' | 'strategies' | 'homework' | 'anya' | 'prompts' | 'textbook'
 const KnowledgePage = lazy(() => import('./KnowledgePage'))
@@ -34,6 +35,8 @@ const newTask = (studentId: string, order: number, stage: Stage): StrategyTask =
 
 function App() {
   const calm = useCalmMotion()
+  const currentUser = useCurrentUser()
+  const { logout } = useAuth()
   const [data, setData] = useState<AppData>(loadData)
   const [page, setPage] = useState<Page>('overview')
   const [groupsView,setGroupsView]=useState<'groups'|'students'>('groups')
@@ -56,6 +59,7 @@ function App() {
   const [importError,setImportError] = useState('')
   const [confirmState,setConfirmState] = useState<ConfirmState|null>(null)
   const [notice,setNotice] = useState<{title:string;description:string}|null>(null)
+  const [logoutPending,setLogoutPending] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const dataRef = useRef(data)
   dataRef.current = data
@@ -149,7 +153,7 @@ function App() {
     <header className="workspace-toolbar">
       <div className="workspace-toolbar-left"><button className="brand-logo" aria-label="Кураторская — обзор" title="Обзор" onClick={() => openPage('overview')}><img src="/brand-star.svg" width="28" height="28" alt=""/><span>Кураторская</span></button></div>
       <nav className="toolbar-nav" aria-label="Основная навигация">{nav.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'active' : ''} aria-current={page===id?'page':undefined} title={label} onClick={() => openPage(id)}><Icon size={17}/><span>{label}</span></button>)}</nav>
-      <div className="workspace-toolbar-right"><div className="group-switch"><Select aria-label="Перейти к группе" value={page==='strategies'?groupId ?? '':''} onChange={e => e.target.value ? openGroup(e.target.value) : (setGroupId(null),setStudentId(null),setPage('strategies'))}><option value="">Все группы</option>{data.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</Select></div><button className="toolbar-icon" aria-label="Поиск" title="Поиск" onClick={() => setSearchOpen(v => !v)}><Search size={16} weight="regular"/></button><button className="toolbar-icon" aria-label="Данные и копии" title="Данные и копии" onClick={() => setModal('backup')}><Settings2 size={16} weight="regular"/></button></div>
+      <div className="workspace-toolbar-right"><div className="group-switch"><Select aria-label="Перейти к группе" value={page==='strategies'?groupId ?? '':''} onChange={e => e.target.value ? openGroup(e.target.value) : (setGroupId(null),setStudentId(null),setPage('strategies'))}><option value="">Все группы</option>{data.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</Select></div><button className="toolbar-icon" aria-label="Поиск" title="Поиск" onClick={() => setSearchOpen(v => !v)}><Search size={16} weight="regular"/></button><button className="toolbar-icon" aria-label="Данные и копии" title="Данные и копии" onClick={() => setModal('backup')}><Settings2 size={16} weight="regular"/></button><span className="toolbar-user" title={`Аккаунт: ${currentUser.login}`}>{currentUser.login}</span><button className="toolbar-icon" aria-label="Выйти" title="Выйти" disabled={logoutPending} onClick={() => { setLogoutPending(true); void logout().catch(() => setNotice({title:'Не удалось выйти',description:'Сессия остаётся активной. Проверьте соединение с сервером и повторите попытку'})).finally(() => setLogoutPending(false)) }}><SignOut size={17} weight="regular"/></button></div>
       <AnimatePresence initial={false}>{searchOpen && <motion.div key="search" className="toolbar-search-panel" {...calm.popover}><input autoFocus aria-label="Поиск группы или ученицы" placeholder="Группа или ученица" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>{normalizedSearch && <div className="toolbar-search-results">{foundStudents.map(s => <button key={s.id} onClick={() => { openStudent(s.id); setSearchOpen(false); setSearchTerm('') }}><strong>{s.name}</strong><small>{data.groups.find(group=>group.id===s.groupId)?.name||'Группа не найдена'} · ученица</small></button>)}{foundGroups.map(g => <button key={g.id} onClick={() => { openGroup(g.id); setSearchOpen(false); setSearchTerm('') }}><strong>{g.name}</strong><small>Группа</small></button>)}{!foundStudents.length && !foundGroups.length && <p>Ничего не найдено</p>}</div>}</motion.div>}</AnimatePresence>
     </header>
     <main className={`main ${page === 'overview' ? 'overview-main' : ''}`}>
