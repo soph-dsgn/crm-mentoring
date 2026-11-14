@@ -7,6 +7,7 @@ export type AuthContextValue = {
   login: (payload: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   changePassword: (payload: ChangePasswordRequest) => Promise<void>
+  refreshCurrentUser: () => Promise<void>
   retrySession: () => void
 }
 

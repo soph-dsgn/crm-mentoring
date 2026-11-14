@@ -16,5 +16,6 @@ import './select.css'
 import './ux.css'
 import './task-card.css'
 import './auth/auth.css'
+import './accounts/account-admin.css'
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><IconContext.Provider value={{weight:'fill'}}><MotionConfig reducedMotion="user"><AuthProvider><AuthGate><App /></AuthGate></AuthProvider></MotionConfig></IconContext.Provider></React.StrictMode>)

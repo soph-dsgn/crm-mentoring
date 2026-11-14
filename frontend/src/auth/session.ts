@@ -20,3 +20,7 @@ export async function closeSession(logout: () => Promise<void>): Promise<AuthAct
   await logout()
   return { type: 'SIGNED_OUT' }
 }
+
+export async function refreshSession(loadCurrentUser: () => Promise<CurrentUser>): Promise<AuthAction> {
+  return { type: 'AUTHENTICATED', user: await loadCurrentUser() }
+}
