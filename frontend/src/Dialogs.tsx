@@ -35,11 +35,12 @@ type ConfirmProps = {
   cancelLabel?: string
   danger?: boolean
   showCancel?: boolean
+  getErrorMessage?: (error: unknown) => string
   onConfirm: () => void | Promise<void>
   onClose: () => void
 }
 
-export function ConfirmDialog({open,title,description,confirmLabel='Подтвердить',cancelLabel='Отмена',danger=false,showCancel=true,onConfirm,onClose}:ConfirmProps) {
+export function ConfirmDialog({open,title,description,confirmLabel='Подтвердить',cancelLabel='Отмена',danger=false,showCancel=true,getErrorMessage,onConfirm,onClose}:ConfirmProps) {
   const [pending,setPending]=useState(false)
   const pendingRef=useRef(false)
   const [error,setError]=useState('')
@@ -49,7 +50,7 @@ export function ConfirmDialog({open,title,description,confirmLabel='Подтве
     pendingRef.current=true
     setPending(true);setError('')
     try { await onConfirm(); onClose() }
-    catch { setError('Не удалось выполнить действие. Данные не изменены') }
+    catch (caught) { setError(getErrorMessage?.(caught) ?? 'Не удалось выполнить действие. Данные не изменены') }
     finally { pendingRef.current=false;setPending(false) }
   }
   return <Dialog open={open} title={title} description={description} onClose={onClose} dismissible={!pending}>

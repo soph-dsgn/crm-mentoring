@@ -4,7 +4,7 @@ import { authApi } from '../api/auth'
 import { setSessionExpiredHandler } from '../api/http'
 import { authReducer, initialAuthState } from './authState'
 import { AuthContext } from './authContext'
-import { closeSession, restoreSession } from './session'
+import { closeSession, refreshSession, restoreSession } from './session'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialAuthState)
@@ -42,7 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'PASSWORD_CHANGED' })
   }, [])
 
+  const refreshCurrentUser = useCallback(async () => {
+    dispatch(await refreshSession(() => authApi.current()))
+  }, [])
+
   const retrySession = useCallback(() => checkSession(), [checkSession])
-  const value = useMemo(() => ({ state, login, logout, changePassword, retrySession }), [state, login, logout, changePassword, retrySession])
+  const value = useMemo(() => ({ state, login, logout, changePassword, refreshCurrentUser, retrySession }), [state, login, logout, changePassword, refreshCurrentUser, retrySession])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
