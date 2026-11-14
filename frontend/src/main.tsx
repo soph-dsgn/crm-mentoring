@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { MotionConfig } from 'framer-motion'
 import { IconContext } from '@phosphor-icons/react'
 import App from './App'
+import { AuthGate } from './auth/AuthGate'
+import { AuthProvider } from './auth/AuthProvider'
 import '@fontsource-variable/manrope/index.css'
 import './styles.css'
 import './vision-ui.css'
@@ -13,5 +15,6 @@ import './approval.css'
 import './select.css'
 import './ux.css'
 import './task-card.css'
+import './auth/auth.css'
 
-createRoot(document.getElementById('root')!).render(<React.StrictMode><IconContext.Provider value={{weight:'fill'}}><MotionConfig reducedMotion="user"><App /></MotionConfig></IconContext.Provider></React.StrictMode>)
+createRoot(document.getElementById('root')!).render(<React.StrictMode><IconContext.Provider value={{weight:'fill'}}><MotionConfig reducedMotion="user"><AuthProvider><AuthGate><App /></AuthGate></AuthProvider></MotionConfig></IconContext.Provider></React.StrictMode>)
