@@ -10,7 +10,8 @@
     "verify": "npm run verify:workflow",
     "verify:auth": "node scripts/verify-auth.mjs",
     "verify:accounts": "node scripts/verify-accounts.mjs",
-    "verify:workflow": "node scripts/verify-workflow.mjs && node scripts/verify-auth.mjs && node scripts/verify-accounts.mjs",
+    "verify:groups-students": "node scripts/verify-groups-students.mjs",
+    "verify:workflow": "node scripts/verify-workflow.mjs && node scripts/verify-auth.mjs && node scripts/verify-accounts.mjs && node scripts/verify-groups-students.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

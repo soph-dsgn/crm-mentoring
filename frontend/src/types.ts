@@ -10,7 +10,8 @@ export type Owner = 'Не назначен' | 'Софья' | 'Аня'
 export interface Group {
   id: string; name: string; startsAt: string; endsAt: string; actualEndsAt: string;
   status: GroupStatus; statusBeforeArchive: Exclude<GroupStatus, 'archived'> | null;
-  notes: string; createdAt: string; durationMonths?: number
+  notes: string; createdAt: string; durationMonths?: number;
+  serverBacked?: boolean; curatorId?: string; updatedAt?: string; version?: number
 }
 export interface Student {
   id: string; groupId: string; name: string; age: number | null; photo: string; avatarIndex: number;
@@ -18,7 +19,8 @@ export interface Student {
   links: { figma: string; portfolio: string; resume: string; telegram: string; notion: string };
   background: string; experience: string; strengths: string; growthAreas: string;
   difficulties: string; expectations: string; personalNotes: string;
-  pointA: string; pointB: string; notes: string; strategyUpdatedAt: string; createdAt: string
+  pointA: string; pointB: string; notes: string; strategyUpdatedAt: string; createdAt: string;
+  serverBacked?: boolean; userId?: string | null; archivedAt?: string; updatedAt?: string; version?: number
 }
 export interface StrategyTask {
   id: string; studentId: string; title: string; description: string; stage: Stage; status: TaskStatus; owner: Owner;
