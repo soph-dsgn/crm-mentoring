@@ -13,9 +13,10 @@
 .study-section-toggle span { flex:none; color:var(--ui-muted); font-size:13px; }
 .study-section-toggle svg { transition:transform var(--motion-quick, 180ms) var(--motion-ease-out, cubic-bezier(.23,1,.32,1)); }
 .study-section-toggle svg.closed { transform:rotate(-90deg); }
-.study-section-actions { display:flex; gap:12px; flex:none; }
+.study-section-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px 12px; flex:none; }
 .study-section-actions button { display:inline-flex; align-items:center; gap:5px; min-height:36px; padding:0 8px; color:var(--ui-muted); font-size:13px; background:none; border:0; border-radius:10px; cursor:pointer; }
 .study-section-actions button:hover { color:var(--ui-text); }
+.study-section-actions button:disabled { opacity:.4; cursor:default; }
 .study-section-body { padding:0 0 16px; }
 .study-task { display:flex; align-items:center; gap:12px; min-width:0; padding:14px 0; border-top:1px solid var(--ui-line); }
 .study-task-select input { width:17px; height:17px; accent-color:#111; cursor:pointer; }
@@ -39,5 +40,5 @@
 .study-new-section input { background:#fff; }
 .study-plan .dialog textarea { width:100%; }
 @media (max-width:1000px) { .study-task { flex-wrap:wrap; } .study-task-title { flex-basis:calc(100% - 44px); } .study-status { margin-left:29px; } .study-task-actions { margin-left:auto; } }
-@media (max-width:700px) { .study-plan-head { align-items:flex-start; flex-direction:column; } .study-plan-head .btn { width:100%; justify-content:center; } .study-section { padding:0 16px; } .study-section-head { align-items:flex-start; flex-direction:column; gap:0; padding:12px 0; } .study-section-actions { padding:0 0 10px 30px; } .study-move { max-width:180px; } }
+@media (max-width:700px) { .study-plan-head { align-items:flex-start; flex-direction:column; } .study-plan-head .btn { width:100%; justify-content:center; } .study-section { padding:0 16px; } .study-section-head { align-items:flex-start; flex-direction:column; gap:0; padding:12px 0; } .study-section-actions { justify-content:flex-start; padding:0 0 10px 30px; } .study-move { max-width:180px; } }
 @media (max-width:480px) { .study-plan-head h2 { font-size:22px; line-height:30px; } .study-task-title strong { white-space:normal; } .study-task-title small { white-space:normal; } .study-new-section { flex-direction:column; } }

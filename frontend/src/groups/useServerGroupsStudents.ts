@@ -3,6 +3,7 @@ import { groupsApi } from '../api/groups'
 import { groupCreateToApi, groupFromApi, groupUpdateToApi, studentCreateToApi, studentFromApi, studentUpdateToApi } from '../api/mappers'
 import { studentsApi } from '../api/students'
 import { ApiError } from '../api/http'
+import { filterFulfilledSources, partitionSettled } from '../api/settled'
 import type { Group, GroupStatus, Student } from '../types'
 
 type LoadStatus = 'loading' | 'ready' | 'error'
@@ -16,6 +17,7 @@ export function useServerGroupsStudents(identityKey: string) {
   const [students, setStudents] = useState<Student[]>([])
   const [status, setStatus] = useState<LoadStatus>('loading')
   const [error, setError] = useState<unknown>(null)
+  const [partialErrorCount, setPartialErrorCount] = useState(0)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setStatus(current => current === 'ready' ? 'ready' : 'loading')
@@ -23,13 +25,19 @@ export function useServerGroupsStudents(identityKey: string) {
     try {
       const groupWires = await groupsApi.listAll({}, signal)
       const nextGroups = groupWires.map(groupFromApi)
-      const rosterPages = await Promise.all(nextGroups.map(group => studentsApi.listAll(group.id, signal)))
-      const nextStudents = rosterPages.flat().map(studentFromApi)
-      setGroups(nextGroups)
+      const rosterResults = await Promise.allSettled(nextGroups.map(group => studentsApi.listAll(group.id, signal)))
+      if (signal?.aborted) return
+      const rosterPages = partitionSettled(rosterResults)
+      if (nextGroups.length && !rosterPages.values.length) throw rosterPages.errors[0]
+      const nextStudents = rosterPages.values.flat().map(studentFromApi)
+      const loadedGroups = filterFulfilledSources(nextGroups, rosterResults)
+      setGroups(loadedGroups)
       setStudents(nextStudents)
+      setPartialErrorCount(rosterPages.errors.length)
       setStatus('ready')
     } catch (nextError) {
       if (nextError instanceof DOMException && nextError.name === 'AbortError') return
+      setPartialErrorCount(0)
       setError(nextError)
       setStatus('error')
     }
@@ -100,5 +108,5 @@ export function useServerGroupsStudents(identityKey: string) {
     return next
   }, [refreshStudent, withConflictRefresh])
 
-  return { groups, students, status, error, load, refreshGroup, refreshStudent, saveGroup, changeGroupStatus, saveStudent, setStudentArchived }
+  return { groups, students, status, error, partialErrorCount, load, refreshGroup, refreshStudent, saveGroup, changeGroupStatus, saveStudent, setStudentArchived }
 }
