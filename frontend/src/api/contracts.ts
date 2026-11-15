@@ -155,3 +155,73 @@ export type OffboardResponse = {
   user: SafeUser
   reassigned_group_ids: string[]
 }
+
+export type StrategyRead = {
+  id: string
+  student_id: string
+  source_metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export type StrategySectionRead = {
+  id: string
+  strategy_id: string
+  title: string
+  position: number
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export type StrategyTaskRead = {
+  id: string
+  strategy_id: string
+  section_id: string
+  title: string
+  description: string
+  materials: string[]
+  links: Record<string, string>
+  period_text: string
+  due_at: string | null
+  position: number
+  study_status: 'not_started' | 'in_progress' | 'hold' | 'done'
+  review_status: 'none' | 'pending' | 'revision' | 'accepted'
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export type ReorderItem = { id: string; expected_version: number; position: number }
+export type StrategyTaskWrite = {
+  title: string
+  description?: string
+  materials?: string[]
+  links?: Record<string, string>
+  period_text?: string
+  due_at?: string | null
+  position: number
+}
+export type StrategyTaskUpdate = Partial<Omit<StrategyTaskWrite, 'position'>> & { expected_version: number }
+
+export type TaskHistoryRead = {
+  id: string
+  task_id: string
+  actor_user_id?: string
+  event_type: string
+  details: Record<string, unknown>
+  created_at: string
+}
+export type TaskHistoryList = { items: TaskHistoryRead[]; next_cursor: string | null }
+
+export type ApprovalRead = {
+  id: string
+  task_id: string
+  status: 'to_send' | 'sent' | 'reviewing' | 'revision' | 'approved'
+  comment: string
+  created_at: string
+  updated_at: string
+  version: number
+}

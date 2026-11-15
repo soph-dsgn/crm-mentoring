@@ -15,9 +15,10 @@ type Props = {
   statusTitle?: string
   badge?: ReactNode
   actions?: ReactNode
+  statusOptions?: StudyStatus[]
 }
 
-export default function TaskCard({ task, selected, onSelect, onOpen, onStatus, statusDisabled = false, statusTitle, badge, actions }: Props) {
+export default function TaskCard({ task, selected, onSelect, onOpen, onStatus, statusDisabled = false, statusTitle, badge, actions, statusOptions }: Props) {
   const hideTitle = hasTechnicalUntitledTitle(task)
   const values=[task.url,...task.materials].filter(Boolean)
   const links=values.map(safeExternalUrl).filter((value):value is string=>Boolean(value))
@@ -43,7 +44,7 @@ export default function TaskCard({ task, selected, onSelect, onOpen, onStatus, s
         {notes.map((note, index) => <span key={`${note}-${index}`}>{note}</span>)}
       </div>}
     </div>
-    <div className="task-card-status">{badge}<TaskStatusSelect value={task.studyStatus} onChange={onStatus} ariaLabel={hideTitle ? 'Статус задачи без названия' : `Статус задачи: ${task.title}`} disabled={statusDisabled} title={statusTitle}/></div>
+    <div className="task-card-status">{badge}<TaskStatusSelect value={task.studyStatus} onChange={onStatus} ariaLabel={hideTitle ? 'Статус задачи без названия' : `Статус задачи: ${task.title}`} disabled={statusDisabled} title={statusTitle} options={statusOptions}/></div>
     {actions && <div className="task-card-actions">{actions}</div>}
   </article>
 }

@@ -6,19 +6,21 @@ import { copyText } from './clipboard'
 import { APPROVAL_STATUS, homeworkDescription, homeworkText, REVIEW_STATUS, taskColumn } from './data'
 import type { Homework, StrategySection, StrategyTask, Student, StudyStatus } from './types'
 import { DeleteConfirmDialog, Dialog, InputDialog, NoticeDialog } from './Dialogs'
+import { studyStatusOptions } from './strategies/strategyState'
 
 type Props = {
   student: Student; groupName: string; sections: StrategySection[]; tasks: StrategyTask[]
-  onOpenTask: (id:string)=>void; onStatus: (id:string,status:StudyStatus)=>void
+  onOpenTask: (id:string)=>void; onStatus: (id:string,status:StudyStatus)=>void; canEdit?: boolean; serverManaged?: boolean; hasStrategy?: boolean
   onAddTask: (sectionId:string)=>void
   onAddSection: (title:string)=>void; onRenameSection: (id:string,title:string)=>void
   onDeleteSection: (id:string)=>void; onMoveTask: (task:StrategyTask,delta:number)=>void
+  onMoveSection?: (section:StrategySection,delta:number)=>void; onCreateStrategy?:()=>void
   onChangeSection: (id:string,sectionId:string)=>void
   onGenerate: (ids:string[],title:string,text:string)=>string
   onUpdateHomework: (id:string,patch:Partial<Homework>)=>void
 }
 
-export default function StrategyPlan({student,sections,tasks,onOpenTask,onStatus,onAddTask,onAddSection,onRenameSection,onDeleteSection,onMoveTask,onChangeSection,onGenerate,onUpdateHomework}:Props) {
+export default function StrategyPlan({student,sections,tasks,onOpenTask,onStatus,onAddTask,onAddSection,onRenameSection,onDeleteSection,onMoveTask,onMoveSection,onChangeSection,onGenerate,onUpdateHomework,canEdit=true,serverManaged=false,hasStrategy=true,onCreateStrategy}:Props) {
   const [collapsed,setCollapsed] = useState<string[]>([])
   const [selected,setSelected] = useState<string[]>([])
   const [newSection,setNewSection] = useState('')
@@ -53,10 +55,12 @@ export default function StrategyPlan({student,sections,tasks,onOpenTask,onStatus
     } catch { setCopyError('Не удалось скопировать сообщение. Выделите текст и скопируйте вручную') }
   }
 
+  if(serverManaged&&!hasStrategy)return <div className="study-plan"><div className="profile-empty"><strong>Стратегия пока не создана</strong><p>{canEdit?'Создайте стратегию, затем добавьте смысловые разделы и задачи':'Куратор ещё не создал стратегию для этого профиля'}</p>{canEdit&&onCreateStrategy&&<button className="btn dark" onClick={onCreateStrategy}>Создать стратегию</button>}</div></div>
+
   return <div className="study-plan">
     <div className="study-plan-head">
       <div className="study-plan-identity"><div><h2>Индивидуальная стратегия</h2><p>{student.stageKnown===false?'Этап не указан':student.stage==='start'?'Начало':student.stage==='portfolio'?'Портфолио':'Отклики'}</p></div></div>
-      {selected.length>0&&<button className="btn dark" onClick={generate}>Сформировать ДЗ · {selected.length}</button>}
+      {!serverManaged&&selected.length>0&&<button className="btn dark" onClick={generate}>Сформировать ДЗ · {selected.length}</button>}
     </div>
     {sourceFile&&<a className="study-source" href={encodeURI('/'+sourceFile.replace(/^public\//,''))} target="_blank" rel="noopener noreferrer">Открыть исходную стратегию <ExternalLink size={15} weight="regular"/></a>}
     {displaySections.length ? <div className="study-section-list">{displaySections.map(section=>{
@@ -65,19 +69,20 @@ export default function StrategyPlan({student,sections,tasks,onOpenTask,onStatus
       return <section className="study-section" key={section.id}>
         <div className="study-section-head">
           <button className="study-section-toggle" aria-expanded={!closed} onClick={()=>setCollapsed(ids=>ids.includes(section.id)?ids.filter(id=>id!==section.id):[...ids,section.id])}><ChevronDown size={18} className={closed?'closed':''}/><strong>{section.title}</strong><span>{members.filter(task=>taskColumn(task)==='done').length} / {members.length}</span></button>
-          {section.id!=='__unsorted'&&<div className="study-section-actions"><button className="study-add-task" onClick={()=>onAddTask(section.id)}><Plus size={15} weight="regular"/> Добавить задачу</button><button onClick={()=>setRenameSection(section)}><Pencil size={15} weight="regular"/> Переименовать</button><button onClick={()=>members.length?setSectionNotice(true):setDeleteSection(section)}><Trash size={15} weight="regular"/> Удалить</button></div>}
+          {canEdit&&section.id!=='__unsorted'&&<div className="study-section-actions">{serverManaged&&onMoveSection&&<><button disabled={ordered[0]?.id===section.id} aria-label={`Переместить раздел выше: ${section.title}`} onClick={()=>onMoveSection(section,-1)}><ArrowUp size={15}/> Выше</button><button disabled={ordered[ordered.length-1]?.id===section.id} aria-label={`Переместить раздел ниже: ${section.title}`} onClick={()=>onMoveSection(section,1)}><ArrowDown size={15}/> Ниже</button></>}<button className="study-add-task" onClick={()=>onAddTask(section.id)}><Plus size={15} weight="regular"/> Добавить задачу</button><button onClick={()=>setRenameSection(section)}><Pencil size={15} weight="regular"/> Переименовать</button>{!serverManaged&&<button onClick={()=>members.length?setSectionNotice(true):setDeleteSection(section)}><Trash size={15} weight="regular"/> Удалить</button>}</div>}
         </div>
         {!closed&&<div className="study-section-body">
           {members.map((task,index)=>{
             const reviewing=task.reviewStatus==='pending'||task.reviewStatus==='revision'
             const badge=<>{reviewing&&<small className="study-review">{REVIEW_STATUS[task.reviewStatus]}</small>}{task.approvalStatus==='revision'&&<small className="study-review">{APPROVAL_STATUS.revision}</small>}</>
-            const actions=<><div className="study-task-actions"><button disabled={index===0} aria-label={`Переместить выше: ${task.title}`} title="Выше" onClick={()=>onMoveTask(task,-1)}><ArrowUp size={15} weight="regular"/></button><button disabled={index===members.length-1} aria-label={`Переместить ниже: ${task.title}`} title="Ниже" onClick={()=>onMoveTask(task,1)}><ArrowDown size={15} weight="regular"/></button></div><Select className="study-move" aria-label={`Раздел задачи: ${task.title}`} value={sectionOrder.has(task.sectionId)?task.sectionId:''} onChange={event=>onChangeSection(task.id,event.target.value)}><option value="">Без раздела</option>{ordered.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</Select></>
-            return <div key={task.id}><TaskCard task={task} selected={selected.includes(task.id)} onSelect={()=>toggle(task.id)} onOpen={()=>onOpenTask(task.id)} onStatus={status=>onStatus(task.id,status)} statusDisabled={reviewing} statusTitle={reviewing?'Статус изменится после проверки домашнего задания':undefined} badge={badge} actions={actions}/></div>
+            const actions=canEdit&&!task.archivedAt?<><div className="study-task-actions"><button disabled={index===0} aria-label={`Переместить выше: ${task.title}`} title="Выше" onClick={()=>onMoveTask(task,-1)}><ArrowUp size={15} weight="regular"/></button><button disabled={index===members.length-1} aria-label={`Переместить ниже: ${task.title}`} title="Ниже" onClick={()=>onMoveTask(task,1)}><ArrowDown size={15} weight="regular"/></button></div>{!serverManaged&&<Select className="study-move" aria-label={`Раздел задачи: ${task.title}`} value={sectionOrder.has(task.sectionId)?task.sectionId:''} onChange={event=>onChangeSection(task.id,event.target.value)}><option value="">Без раздела</option>{ordered.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</Select>}</>:undefined
+            const taskBadge=<>{task.archivedAt&&<small className="study-review">В архиве</small>}{badge}</>
+            return <div key={task.id}><TaskCard task={task} selected={selected.includes(task.id)} onSelect={!serverManaged&&!task.archivedAt?()=>toggle(task.id):undefined} onOpen={()=>onOpenTask(task.id)} onStatus={status=>onStatus(task.id,status)} statusDisabled={!canEdit||Boolean(task.archivedAt)||reviewing} statusTitle={task.archivedAt?'Сначала восстановите задачу':reviewing?'Статус изменится после проверки домашнего задания':undefined} statusOptions={task.serverBacked?studyStatusOptions(task.studyStatus):undefined} badge={taskBadge} actions={actions}/></div>
           })}
         </div>}
       </section>
     })}</div> : <div className="profile-empty"><strong>Стратегия пока пуста</strong><p>Добавьте первый раздел и задачи после знакомства с ученицей</p></div>}
-    <form className="study-new-section" onSubmit={event=>{event.preventDefault();if(newSection.trim()){onAddSection(newSection.trim());setNewSection('')}}}><input aria-label="Название нового раздела" placeholder="Название нового раздела" value={newSection} onChange={event=>setNewSection(event.target.value)}/><button className="btn secondary" type="submit"><Plus size={16} weight="regular"/> Добавить раздел</button></form>
+    {canEdit&&<form className="study-new-section" onSubmit={event=>{event.preventDefault();if(newSection.trim()){onAddSection(newSection.trim());setNewSection('')}}}><input aria-label="Название нового раздела" placeholder="Название нового раздела" value={newSection} onChange={event=>setNewSection(event.target.value)}/><button className="btn secondary" type="submit"><Plus size={16} weight="regular"/> Добавить раздел</button></form>}
     <Dialog open={Boolean(draftId)} title="Домашнее задание" onClose={()=>setDraftId('')} wide><div className="form"><p>Черновик сохранён в истории ученицы. Отредактируйте сообщение и скопируйте его для Telegram</p><textarea className="homework-preview-text" readOnly={copied} rows={Math.min(20,Math.max(9,selected.length*4))} value={draftText} onChange={event=>{setDraftText(event.target.value);onUpdateHomework(draftId,{text:event.target.value})}}/>{copied&&<p>ДЗ выдано и сохранено в истории. Исходный текст больше не меняется</p>}{copyError&&<p role="alert">{copyError}</p>}<div className="dialog-actions"><button className="btn secondary" onClick={()=>setDraftId('')}>Закрыть</button><button className="btn dark" onClick={copy}>{copied?'Скопировано':'Скопировать текст'}</button></div></div></Dialog>
     <InputDialog open={Boolean(renameSection)} title="Переименовать раздел" label="Название раздела" initialValue={renameSection?.title||''} onConfirm={title=>{if(renameSection)onRenameSection(renameSection.id,title)}} onClose={()=>setRenameSection(null)}/>
     <DeleteConfirmDialog open={Boolean(deleteSection)} title="Удалить раздел?" description={`Раздел «${deleteSection?.title||''}» будет удалён`} confirmLabel="Удалить раздел" onConfirm={()=>{if(deleteSection)onDeleteSection(deleteSection.id)}} onClose={()=>setDeleteSection(null)}/>

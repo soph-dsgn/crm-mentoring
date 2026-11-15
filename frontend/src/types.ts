@@ -29,8 +29,9 @@ export interface StrategyTask {
   history: { at: string; label: string }[]
   sectionId: string; studyStatus: StudyStatus; period: string; sourceFile?: string
   materials: string[]; archivedAt?: string
+  serverBacked?: boolean; strategyId?: string; version?: number; approvalId?: string; approvalVersion?: number; serverLinks?: Record<string,string>
 }
-export interface StrategySection { id: string; studentId: string; title: string; order: number; createdAt: string }
+export interface StrategySection { id: string; studentId: string; title: string; order: number; createdAt: string; serverBacked?: boolean; strategyId?: string; updatedAt?: string; version?: number }
 export interface Meeting { id: string; studentId: string; date: string; title: string; summary: string; createdAt: string }
 export interface HomeworkItem { taskId: string; title: string; description: string; url: string; materials?: string[]; dueAt: string }
 export interface Homework { id: string; studentId: string; title: string; text: string; items: HomeworkItem[]; status: HomeworkStatus; issuedAt: string; submittedAt: string; reviewedAt?: string; workUrl: string; comment: string; dueAt: string; createdAt: string; deletedAt?: string }
