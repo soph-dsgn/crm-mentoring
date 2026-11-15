@@ -55,6 +55,14 @@
 .credential-content code { overflow-wrap:anywhere; color:#111; font-family:Manrope,Arial,sans-serif; font-size:15px; font-weight:650; }
 .credential-content p { margin:2px 0 0; color:var(--ui-muted); font-size:12px; line-height:1.55; }
 .account-permission { margin-top:30px; }
+.student-account-panel { margin:0 0 18px; padding:22px; }
+.student-account-state { display:flex; min-height:76px; align-items:center; justify-content:center; gap:12px; color:var(--ui-muted); font-size:12px; }
+.student-account-empty,.student-account-ready { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px; border-radius:15px; background:#f7f8fa; }
+.student-account-empty > div,.student-account-ready > div:first-child { display:flex; min-width:0; align-items:center; gap:11px; }
+.student-account-empty span,.student-account-ready span { display:flex; min-width:0; flex-direction:column; gap:3px; }
+.student-account-empty strong,.student-account-ready strong { overflow-wrap:anywhere; font-size:13px; }
+.student-account-empty small,.student-account-ready small { color:var(--ui-muted); font-size:11px; line-height:16px; }
+.student-account-ready > div:last-child { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
 @media(max-width:900px) {
   .account-layout { grid-template-columns:1fr; }
   .account-list { display:flex; overflow-x:auto; }
@@ -74,5 +82,7 @@
   .account-groups .btn { width:100%; }
   .credential-content .dialog-actions { align-items:stretch; flex-direction:column-reverse; }
   .credential-content .dialog-actions .btn { width:100%; }
+  .student-account-empty,.student-account-ready { align-items:stretch; flex-direction:column; }
+  .student-account-empty > .btn,.student-account-ready > div:last-child .btn { width:100%; }
 }
 @media(prefers-reduced-motion:reduce) { .account-spinner { animation:none; } }

@@ -65,7 +65,7 @@ export function TemporaryCredentialDialog({ credential, onClose }: { credential:
     {credential&&<div className="credential-content">
       <div><span>Логин</span><code>{credential.login}</code></div>
       <div><span>Временный пароль</span><code>{credential.temporaryPassword}</code></div>
-      <p>Передайте данные куратору безопасным способом. При первом входе потребуется создать новый пароль</p>
+      <p>Передайте данные безопасным способом. При первом входе потребуется создать новый пароль</p>
       {copyError&&<p className="dialog-error" role="alert">{copyError}</p>}
       <div className="dialog-actions">
         <button type="button" className="btn secondary" onClick={() => void copy()}>{copied?<Check size={16}/>:<Copy size={16}/>} {copied?'Скопировано':'Скопировать'}</button>

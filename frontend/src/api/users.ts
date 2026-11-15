@@ -6,6 +6,9 @@ import type {
   OffboardResponse,
   SafeUser,
   TemporaryCredentialResponse,
+  StudentAccountResponse,
+  StudentTemporaryCredentialResponse,
+  PasswordResetResponse,
 } from './contracts'
 import { ApiError, apiRequest } from './http'
 
@@ -42,6 +45,20 @@ export const usersApi = {
       body: { curator_id: curatorId },
       signal,
     })
+  },
+  createStudentAccount(studentId: string, login: string, signal?: AbortSignal) {
+    return apiRequest<StudentTemporaryCredentialResponse>(`${ADMIN_BASE}/students/${encodeURIComponent(studentId)}/account`, {
+      method: 'POST', body: { login }, signal,
+    })
+  },
+  getStudentAccount(studentId: string, signal?: AbortSignal) {
+    return apiRequest<StudentAccountResponse>(`${ADMIN_BASE}/students/${encodeURIComponent(studentId)}/account`, { signal })
+  },
+  deactivateStudentAccount(studentId: string, signal?: AbortSignal) {
+    return apiRequest<StudentAccountResponse>(`${ADMIN_BASE}/students/${encodeURIComponent(studentId)}/deactivate-account`, { method: 'POST', signal })
+  },
+  resetPassword(userId: string, signal?: AbortSignal) {
+    return apiRequest<PasswordResetResponse>(`${ADMIN_BASE}/users/${encodeURIComponent(userId)}/reset-password`, { method: 'POST', signal })
   },
   async listCuratorGroups(curatorId: string, signal?: AbortSignal): Promise<GroupSummary[]> {
     const groups: GroupSummary[] = []

@@ -25,6 +25,7 @@ export function accountErrorMessage(error: unknown): string {
     case 'session_refresh_failed': return 'Права переданы, но не удалось обновить сессию. Перезагрузите страницу'
     case 'forbidden': return 'Недостаточно прав для этого действия'
     case 'login_conflict': return 'Этот логин уже используется'
+    case 'student_account_exists': return 'Для этого профиля аккаунт уже создан'
     case 'invalid_login': return 'Проверьте формат логина'
     case 'user_inactive': return 'Аккаунт уже деактивирован'
     case 'curator_has_groups': return 'Сначала передайте группы другому куратору'
