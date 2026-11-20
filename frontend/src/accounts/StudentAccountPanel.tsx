@@ -5,6 +5,7 @@ import { ApiError, usersApi } from '../api/users'
 import { ConfirmDialog, Dialog } from '../Dialogs'
 import { TemporaryCredentialDialog } from './AccountAdminPage'
 import { accountErrorMessage, temporaryCredentialReducer } from './accountState'
+import { studentPortalUrl } from '../student/studentState'
 
 function CreateStudentAccountDialog({ open, studentId, onClose, onCreated }: { open: boolean; studentId: string; onClose: () => void; onCreated: (response: Awaited<ReturnType<typeof usersApi.createStudentAccount>>) => void }) {
   const inputId = useId()
@@ -59,13 +60,13 @@ export default function StudentAccountPanel({ studentId, canManage }: { studentI
   if (!canManage) return null
   const created = (response: Awaited<ReturnType<typeof usersApi.createStudentAccount>>) => {
     setAccount({ student_id: response.student_id, user: response.user })
-    dispatchCredential({ type:'show', credential:{ login:response.user.login, temporaryPassword:response.temporary_password } })
+    dispatchCredential({ type:'show', credential:{ login:response.user.login, temporaryPassword:response.temporary_password, entryUrl:studentPortalUrl(studentId,window.location.href) } })
     setCreateOpen(false)
   }
   const reset = async () => {
     if (!account) return
     const response = await usersApi.resetPassword(account.user.id)
-    dispatchCredential({ type:'show', credential:{ login:account.user.login, temporaryPassword:response.temporary_password } })
+    dispatchCredential({ type:'show', credential:{ login:account.user.login, temporaryPassword:response.temporary_password, entryUrl:studentPortalUrl(studentId,window.location.href) } })
     setAccount(current => current ? { ...current, user:{ ...current.user, must_change_password:true } } : current)
   }
   const deactivate = async () => setAccount(await usersApi.deactivateStudentAccount(studentId))

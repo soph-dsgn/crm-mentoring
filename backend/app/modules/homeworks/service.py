@@ -82,11 +82,14 @@ def get_homework(database: Session, actor: User, homework_id: str, *, write: boo
     if homework is None:
         raise _not_found("Homework")
     get_strategy(database, actor, homework.strategy_id, write=write)
+    if actor.role is UserRole.STUDENT and homework.status is HomeworkStatus.DRAFT:
+        raise _not_found("Homework")
     return homework
 
 
 def list_homeworks(
     database: Session,
+    actor: User,
     strategy: Strategy,
     *,
     cursor: str | None,
@@ -98,12 +101,18 @@ def list_homeworks(
         .options(selectinload(Homework.items).selectinload(HomeworkItem.task))
         .where(Homework.strategy_id == strategy.id)
     )
+    if actor.role is UserRole.STUDENT:
+        statement = statement.where(Homework.status != HomeworkStatus.DRAFT)
     if not include_archived:
         statement = statement.where(Homework.archived_at.is_(None))
     cursor_id = decode_cursor(cursor)
     if cursor_id is not None:
         row = database.get(Homework, cursor_id)
-        if row is None or row.strategy_id != strategy.id:
+        if (
+            row is None
+            or row.strategy_id != strategy.id
+            or (actor.role is UserRole.STUDENT and row.status is HomeworkStatus.DRAFT)
+        ):
             raise ApiError(422, "invalid_cursor", "Pagination cursor is invalid")
         statement = statement.where(
             or_(

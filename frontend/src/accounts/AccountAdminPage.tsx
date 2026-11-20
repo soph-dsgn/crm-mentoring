@@ -50,7 +50,7 @@ export function TemporaryCredentialDialog({ credential, onClose }: { credential:
   const copy = async () => {
     if (!credential) return
     try {
-      await copyText(`Логин: ${credential.login}\nВременный пароль: ${credential.temporaryPassword}`)
+      await copyText([`Логин: ${credential.login}`,`Временный пароль: ${credential.temporaryPassword}`,credential.entryUrl?`Ссылка для входа: ${credential.entryUrl}`:''].filter(Boolean).join('\n'))
       setCopied(true); setCopyError('')
     } catch {
       setCopyError('Не удалось скопировать. Выделите данные вручную')
@@ -65,6 +65,7 @@ export function TemporaryCredentialDialog({ credential, onClose }: { credential:
     {credential&&<div className="credential-content">
       <div><span>Логин</span><code>{credential.login}</code></div>
       <div><span>Временный пароль</span><code>{credential.temporaryPassword}</code></div>
+      {credential.entryUrl&&<div><span>Персональная ссылка</span><code>{credential.entryUrl}</code></div>}
       <p>Передайте данные безопасным способом. При первом входе потребуется создать новый пароль</p>
       {copyError&&<p className="dialog-error" role="alert">{copyError}</p>}
       <div className="dialog-actions">

@@ -4,6 +4,7 @@ import { ApiError } from '../api/http'
 export type TemporaryCredential = {
   login: string
   temporaryPassword: string
+  entryUrl?: string
 }
 
 export type TemporaryCredentialAction =

@@ -53,6 +53,7 @@ def list_homeworks_endpoint(
     strategy = get_strategy(database, context.user, strategy_id, write=False)
     items, next_cursor = list_homeworks(
         database,
+        context.user,
         strategy,
         cursor=cursor,
         limit=limit,

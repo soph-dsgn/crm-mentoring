@@ -58,6 +58,16 @@ export type GroupRead = GroupSummary & {
   created_at: string
 }
 
+export type GroupStudentRead = {
+  id: string
+  name: string
+  starts_at: string
+  ends_at: string | null
+  actual_ends_at: string | null
+  status: GroupSummary['status']
+  version: number
+}
+
 export type GroupListResponse = {
   items: GroupSummary[]
   next_cursor: string | null
@@ -109,6 +119,8 @@ export type StudentRead = StudentSummary & {
   strategy_updated_at: string
   created_at: string
 }
+
+export type StudentSelfRead = Omit<StudentRead, 'user_id' | 'personal_notes' | 'notes'>
 
 export type StudentListResponse = {
   items: StudentSummary[]
