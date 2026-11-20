@@ -548,6 +548,7 @@ def test_homework_student_scope_mass_assignment_and_private_history(learning_api
     second_task = add_strategy_task(factory, second, "Вторая задача")
     curator_headers = authenticate(client, curator.login)
     first_homework = create_homework(client, curator_headers, first_task)
+    first_draft = create_homework(client, curator_headers, first_task)
     second_homework = create_homework(client, curator_headers, second_task)
     assert transition(client, curator_headers, first_homework, "issued").status_code == 200
 
@@ -567,6 +568,23 @@ def test_homework_student_scope_mass_assignment_and_private_history(learning_api
     assert (
         client.get(f"/api/v1/homeworks/{first_homework['id']}", headers=student_headers).status_code
         == 200
+    )
+    assert (
+        client.get(f"/api/v1/homeworks/{first_draft['id']}", headers=student_headers).status_code
+        == 404
+    )
+    own_listing = client.get(
+        f"/api/v1/strategies/{first_task.strategy_id}/homeworks?include_archived=true",
+        headers=student_headers,
+    )
+    assert own_listing.status_code == 200
+    assert [item["id"] for item in own_listing.json()["items"]] == [first_homework["id"]]
+    assert (
+        client.get(
+            f"/api/v1/strategies/{first_task.strategy_id}/homeworks?cursor={first_draft['id']}",
+            headers=student_headers,
+        ).status_code
+        == 422
     )
     assert (
         client.get(
