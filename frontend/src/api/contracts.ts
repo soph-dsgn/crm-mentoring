@@ -225,3 +225,29 @@ export type ApprovalRead = {
   updated_at: string
   version: number
 }
+
+export type MeetingRead = {
+  id:string; student_id:string; date:string; title:string; summary:string; notes?:string
+  archived_at:string|null; created_at:string; updated_at:string; version:number
+}
+export type MeetingList = { items:MeetingRead[]; next_cursor:string|null }
+export type MeetingCreateRequest = { date:string; title:string; summary?:string; notes?:string }
+export type MeetingUpdateRequest = Partial<MeetingCreateRequest> & { expected_version:number }
+
+export type HomeworkItemRead = {
+  id:string; task_id:string; position:number; title:string; description:string; materials:string[]
+  links:Record<string,string>; period_text:string; due_at:string|null
+}
+export type HomeworkRead = {
+  id:string; strategy_id:string; title:string; description:string; links:Record<string,string>
+  submission_text:string; submission_links:Record<string,string>; curator_feedback:string; due_at:string|null
+  status:'draft'|'issued'|'progress'|'submitted'|'revision'|'accepted'
+  issued_at:string|null; submitted_at:string|null; reviewed_at:string|null; archived_at:string|null
+  created_at:string; updated_at:string; version:number; items:HomeworkItemRead[]
+}
+export type HomeworkList = { items:HomeworkRead[]; next_cursor:string|null }
+export type HomeworkCreateRequest = { title:string; description?:string; task_ids:string[]; links?:Record<string,string>; due_at?:string|null }
+export type HomeworkUpdateRequest = { expected_version:number; title?:string; description?:string; links?:Record<string,string>; due_at?:string|null }
+export type HomeworkTransitionRequest = { expected_version:number; status:HomeworkRead['status']; submission_text?:string; submission_links?:Record<string,string>; curator_feedback?:string }
+export type HomeworkHistoryRead = { id:string; homework_id:string; actor_user_id?:string; event_type:string; from_status:HomeworkRead['status']|null; to_status:HomeworkRead['status']|null; details:Record<string,unknown>; created_at:string }
+export type HomeworkHistoryList = { items:HomeworkHistoryRead[]; next_cursor:string|null }

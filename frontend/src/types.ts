@@ -32,7 +32,17 @@ export interface StrategyTask {
   serverBacked?: boolean; strategyId?: string; version?: number; approvalId?: string; approvalVersion?: number; serverLinks?: Record<string,string>
 }
 export interface StrategySection { id: string; studentId: string; title: string; order: number; createdAt: string; serverBacked?: boolean; strategyId?: string; updatedAt?: string; version?: number }
-export interface Meeting { id: string; studentId: string; date: string; title: string; summary: string; createdAt: string }
-export interface HomeworkItem { taskId: string; title: string; description: string; url: string; materials?: string[]; dueAt: string }
-export interface Homework { id: string; studentId: string; title: string; text: string; items: HomeworkItem[]; status: HomeworkStatus; issuedAt: string; submittedAt: string; reviewedAt?: string; workUrl: string; comment: string; dueAt: string; createdAt: string; deletedAt?: string }
+export interface Meeting {
+  id: string; studentId: string; date: string; title: string; summary: string; createdAt: string
+  notes?: string; archivedAt?: string; updatedAt?: string; version?: number; serverBacked?: boolean
+}
+export interface HomeworkItem {
+  taskId: string; title: string; description: string; url: string; materials?: string[]; dueAt: string
+  id?: string; links?: Record<string,string>; period?: string
+}
+export interface HomeworkHistory { id:string; eventType:string; fromStatus:HomeworkStatus|null; toStatus:HomeworkStatus|null; createdAt:string }
+export interface Homework {
+  id: string; studentId: string; title: string; text: string; items: HomeworkItem[]; status: HomeworkStatus; issuedAt: string; submittedAt: string; reviewedAt?: string; workUrl: string; comment: string; dueAt: string; createdAt: string; deletedAt?: string
+  strategyId?: string; links?: Record<string,string>; submissionText?: string; submissionLinks?: Record<string,string>; archivedAt?: string; updatedAt?: string; version?: number; serverBacked?: boolean; history?: HomeworkHistory[]
+}
 export interface AppData { version: 3; groups: Group[]; students: Student[]; sections: StrategySection[]; tasks: StrategyTask[]; meetings: Meeting[]; homeworks: Homework[]; demo: boolean; demoRevision?: number; importConflicts?: string[] }
