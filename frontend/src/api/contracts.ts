@@ -263,3 +263,33 @@ export type HomeworkUpdateRequest = { expected_version:number; title?:string; de
 export type HomeworkTransitionRequest = { expected_version:number; status:HomeworkRead['status']; submission_text?:string; submission_links?:Record<string,string>; curator_feedback?:string }
 export type HomeworkHistoryRead = { id:string; homework_id:string; actor_user_id?:string; event_type:string; from_status:HomeworkRead['status']|null; to_status:HomeworkRead['status']|null; details:Record<string,unknown>; created_at:string }
 export type HomeworkHistoryList = { items:HomeworkHistoryRead[]; next_cursor:string|null }
+
+export type LegacyImportRequest = {
+  source: Record<string, unknown>
+  curator_assignments: Record<string, string>
+  confirmation_checksum?: string
+  confirm?: boolean
+}
+
+export type LegacyImportIssue = {
+  code: string
+  entity: string
+  legacy_id: string | null
+}
+
+export type LegacyValidationReport = {
+  valid: boolean
+  checksum: string
+  source_version: number | null
+  counts: Record<string, number>
+  conflicts: LegacyImportIssue[]
+  warnings: string[]
+}
+
+export type LegacyImportResult = {
+  import_run_id: string
+  checksum: string
+  counts: Record<string, number>
+  mappings: Record<string, Record<string, string>>
+  idempotent_replay: boolean
+}

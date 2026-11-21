@@ -188,6 +188,18 @@ def test_validate_is_owner_only_and_writes_nothing(import_api) -> None:
         ).status_code
         == 403
     )
+    assert (
+        client.post(
+            "/api/v1/imports/legacy",
+            json={
+                **request_body(admin.id),
+                "confirm": True,
+                "confirmation_checksum": "0" * 64,
+            },
+            headers=headers,
+        ).status_code
+        == 403
+    )
 
     headers = authenticate(client, owner.login)
     response = client.post(
@@ -316,6 +328,35 @@ def test_import_requires_csrf_confirmation_and_matching_checksum(import_api) -> 
         ).status_code
         == 409
     )
+
+
+def test_confirmation_checksum_binds_curator_assignments(import_api) -> None:
+    client, factory = import_api
+    owner = add_user(client, factory, "owner", owner=True)
+    curator = add_user(client, factory, "curator")
+    headers = authenticate(client, owner.login)
+    owner_body = request_body(owner.id)
+    curator_body = request_body(curator.id)
+
+    owner_checksum = client.post(
+        "/api/v1/imports/legacy/validate", json=owner_body, headers=headers
+    ).json()["checksum"]
+    curator_checksum = client.post(
+        "/api/v1/imports/legacy/validate", json=curator_body, headers=headers
+    ).json()["checksum"]
+
+    assert curator_checksum != owner_checksum
+    response = client.post(
+        "/api/v1/imports/legacy",
+        json={
+            **curator_body,
+            "confirm": True,
+            "confirmation_checksum": owner_checksum,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "validation_changed"
 
 
 def test_supported_v1_builds_deterministic_section_and_rejects_invalid_status(import_api) -> None:

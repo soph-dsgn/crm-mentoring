@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpenIcon as BookOpen, ClipboardTextIcon as ClipboardList, DownloadIcon as Download, FileTextIcon as FileText, IdentificationBadgeIcon as IdentificationBadge, SquaresFourIcon as LayoutDashboard, MagnifyingGlassIcon as Search, SignOutIcon as SignOut, SlidersHorizontalIcon as Settings2, SparkleIcon as Sparkles, UploadIcon as Upload, UsersIcon as Users } from '@phosphor-icons/react'
+import { BookOpenIcon as BookOpen, ClipboardTextIcon as ClipboardList, DatabaseIcon as Database, DownloadIcon as Download, FileTextIcon as FileText, IdentificationBadgeIcon as IdentificationBadge, SquaresFourIcon as LayoutDashboard, MagnifyingGlassIcon as Search, SignOutIcon as SignOut, SlidersHorizontalIcon as Settings2, SparkleIcon as Sparkles, UsersIcon as Users } from '@phosphor-icons/react'
 import Select from './Select'
 import PlanOverview from './PlanOverview'
 import { GroupsPage, GroupDetailPage } from './GroupViews'
@@ -9,7 +9,7 @@ import TaskDetail from './TaskDetail'
 import TaskForm from './TaskForm'
 import { hasTechnicalUntitledTitle } from './taskPresentation'
 import { GroupForm, StudentForm } from './Forms'
-import { activeTasks, addCalendarMonths, applyApprovalStatus, applyHomeworkPatch, archiveTask, homeworkDescription, homeworkText, isAppData, loadData, normalizeData, PRE_SECTION_BACKUP_KEY, recallApproval, STUDY_STATUS, STORAGE_KEY, studentTasks, taskColumn, today, uid } from './data'
+import { activeTasks, addCalendarMonths, applyApprovalStatus, applyHomeworkPatch, archiveTask, homeworkDescription, homeworkText, loadData, PRE_SECTION_BACKUP_KEY, recallApproval, STUDY_STATUS, STORAGE_KEY, studentTasks, taskColumn, today, uid } from './data'
 import type { AppData, ApprovalStatus, Group, GroupStatus, Homework, Meeting, Stage, StrategySection, StrategyTask, Student, StudyStatus, TaskStatus } from './types'
 import HomeworkPage from './HomeworkPage'
 import AnyaPage from './AnyaPage'
@@ -27,8 +27,10 @@ import { strategyErrorMessage, withServerStrategies } from './strategies/strateg
 import { useServerLearning } from './learning/useServerLearning'
 import { learningErrorMessage, withServerLearning } from './learning/learningState'
 import { safeExternalUrl } from './safeExternalUrl'
+import MigrationPage from './migration/MigrationPage'
+import { SERVER_CUTOVER_KEY, hasServerCutover } from './migration/migrationState'
 
-type Page = 'overview' | 'strategies' | 'homework' | 'anya' | 'prompts' | 'textbook' | 'accounts'
+type Page = 'overview' | 'strategies' | 'homework' | 'anya' | 'prompts' | 'textbook' | 'accounts' | 'migration'
 const KnowledgePage = lazy(() => import('./KnowledgePage'))
 type Modal = 'group' | 'student' | 'task' | 'taskDetail' | 'backup' | null
 type ConfirmState = { title:string; description:string; confirmLabel:string; danger?:boolean; action:()=>void|Promise<void>; getErrorMessage?:(error:unknown)=>string }
@@ -37,7 +39,10 @@ const nav: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'homework', label: 'Домашние задания', icon: ClipboardList }, { id: 'anya', label: 'Задачи Ани', icon: Sparkles },
   { id: 'prompts', label: 'Промпты', icon: FileText }, { id: 'textbook', label: 'Учебник', icon: BookOpen },
 ]
-const ownerNav = { id: 'accounts' as const, label: 'Аккаунты', icon: IdentificationBadge }
+const ownerNav = [
+  { id: 'accounts' as const, label: 'Аккаунты', icon: IdentificationBadge },
+  { id: 'migration' as const, label: 'Миграция', icon: Database },
+]
 const blankLinks = { figma: '', portfolio: '', resume: '', telegram: '', notion: '' }
 const newGroup = (): Group => ({ id: uid(), name: '', startsAt: today(), endsAt: '', actualEndsAt: '', status: 'backlog', statusBeforeArchive: null, notes: '', createdAt: new Date().toISOString() })
 const newStudent = (groupId: string): Student => ({ id: uid(), groupId, name: '', age: null, photo: '', avatarIndex: -1, stage: 'start', startsAt: today(), level: '', desiredPosition: '', careerGoal: '', links: { ...blankLinks }, background: '', experience: '', strengths: '', growthAreas: '', difficulties: '', expectations: '', personalNotes: '', pointA: '', pointB: '', notes: '', strategyUpdatedAt: new Date().toISOString(), createdAt: new Date().toISOString() })
@@ -48,7 +53,12 @@ function App() {
   const calm = useCalmMotion()
   const currentUser = useCurrentUser()
   const { logout, refreshCurrentUser } = useAuth()
-  const [data, setData] = useState<AppData>(loadData)
+  const [serverCutover, setServerCutover] = useState(hasServerCutover)
+  const [data, setLegacyDataState] = useState<AppData>(loadData)
+  const setData: Dispatch<SetStateAction<AppData>> = useCallback(next => {
+    if (hasServerCutover()) { setServerCutover(true); return }
+    setLegacyDataState(next)
+  }, [])
   const [page, setPage] = useState<Page>('overview')
   const [groupsView,setGroupsView]=useState<'groups'|'students'>('groups')
   const [groupsFilter,setGroupsFilter]=useState<GroupStatus>('active')
@@ -75,17 +85,30 @@ function App() {
   const [formPending,setFormPending]=useState(false)
   const formPendingRef=useRef(false)
   const [formError,setFormError]=useState('')
-  const fileInput = useRef<HTMLInputElement>(null)
+  const skipInitialLegacySave = useRef(true)
   const dataRef = useRef(data)
   dataRef.current = data
-  const visibleNav = useMemo(() => currentUser.is_owner ? [...nav, ownerNav] : nav, [currentUser.is_owner])
+  const visibleNav = useMemo(() => currentUser.is_owner ? [...nav, ...ownerNav] : nav, [currentUser.is_owner])
   const serverDomain = useServerGroupsStudents(currentUser.id)
   const strategyDomain = useServerStrategies(currentUser.id,serverDomain.students)
   const learningDomain = useServerLearning(currentUser.id,serverDomain.students,strategyDomain.strategies,strategyDomain.refreshStudent)
   const domainData = useMemo<AppData>(() => withServerLearning(withServerStrategies(serverDomainData(data,serverDomain.groups,serverDomain.students),strategyDomain.sections,strategyDomain.tasks),learningDomain.meetings,learningDomain.homeworks), [data, serverDomain.groups, serverDomain.students, strategyDomain.sections, strategyDomain.tasks, learningDomain.meetings, learningDomain.homeworks])
 
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); setSaveError(false) } catch { setSaveError(true) } }, [data])
-  useEffect(() => { if (page === 'accounts' && !currentUser.is_owner) setPage('overview') }, [currentUser.is_owner, page])
+  useEffect(() => {
+    if (skipInitialLegacySave.current) { skipInitialLegacySave.current = false; return }
+    if (serverCutover) return
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); setSaveError(false) } catch { setSaveError(true) }
+  }, [data, serverCutover])
+  useEffect(() => {
+    const syncCutover = (event: StorageEvent) => { if (event.key === SERVER_CUTOVER_KEY && event.newValue === 'complete') setServerCutover(true) }
+    window.addEventListener('storage', syncCutover)
+    return () => window.removeEventListener('storage', syncCutover)
+  }, [])
+  useEffect(() => {
+    if (!serverCutover || recordSource !== 'legacy') return
+    setRecordSource('server'); setGroupId(null); setStudentId(null); setModal(null); setPage('overview')
+  }, [recordSource, serverCutover])
+  useEffect(() => { if ((page === 'accounts' || page === 'migration') && !currentUser.is_owner) setPage('overview') }, [currentUser.is_owner, page])
   const group = recordForSource(groupId,recordSource,domainData.groups,data.groups)
   const student = recordForSource(studentId,recordSource,domainData.students,data.students)
   const profileData = student?.serverBacked ? domainData : data
@@ -103,7 +126,7 @@ function App() {
   const openPage = (next: Page) => { if(next==='overview'||next==='strategies'||next==='anya'||next==='homework'){setRecordSource('server');setGroupId(null);setStudentId(null)}if(next==='anya'||next==='homework'){void serverDomain.load();void strategyDomain.load();void learningDomain.load()}setPage(next); setReturnPage(null); setSearchOpen(false) }
   const openGroup = (id: string) => { setRecordSource('server');setReturnPage(page==='strategies'?returnPage:page);setPage('strategies'); setGroupId(id); setStudentId(null);if(serverDomain.groups.some(item=>item.id===id))void serverDomain.refreshGroup(id).catch(error=>setNotice({title:'Не удалось обновить группу',description:groupStudentErrorMessage(error)})) }
   const openStudent = (id: string, tab: ProfileTab = 'overview', homeworkId: string | null = null) => { const s = domainData.students.find(v => v.id === id); if (!s) return;setRecordSource('server');if(page!=='strategies')setStudentBackToRoster(false);setReturnPage(page==='strategies'?returnPage:page); setPage('strategies'); setGroupId(s.groupId); setStudentId(id); setProfileTab(tab); setFocusedHomeworkId(homeworkId);setProfileNavigationKey(key=>key+1);void Promise.all([serverDomain.refreshStudent(id),strategyDomain.refreshStudent(id),learningDomain.refreshStudent(id)]).catch(error=>setNotice({title:'Не удалось обновить профиль',description:error instanceof ApiError?learningErrorMessage(error):groupStudentErrorMessage(error)})) }
-  const openLegacyStudent = (id: string, tab: ProfileTab = 'overview', homeworkId: string | null = null) => { const s = data.students.find(v=>v.id===id);if(!s)return;setRecordSource('legacy');if(page!=='strategies')setStudentBackToRoster(false);setReturnPage(page==='strategies'?returnPage:page);setPage('strategies');setGroupId(s.groupId);setStudentId(id);setProfileTab(tab);setFocusedHomeworkId(homeworkId);setProfileNavigationKey(key=>key+1) }
+  const openLegacyStudent = (id: string, tab: ProfileTab = 'overview', homeworkId: string | null = null) => { if(serverCutover||hasServerCutover()){setServerCutover(true);setNotice({title:'Локальная копия доступна только для скачивания',description:'После миграции рабочие данные загружаются с сервера'});return}const s = data.students.find(v=>v.id===id);if(!s)return;setRecordSource('legacy');if(page!=='strategies')setStudentBackToRoster(false);setReturnPage(page==='strategies'?returnPage:page);setPage('strategies');setGroupId(s.groupId);setStudentId(id);setProfileTab(tab);setFocusedHomeworkId(homeworkId);setProfileNavigationKey(key=>key+1) }
   const returnToSource=()=>{if(!returnPage)return;setPage(returnPage);setStudentId(null);setGroupId(null);setReturnPage(null);setStudentBackToRoster(false);setModal(null)}
   const openTask = (id: string) => {const task=recordSource==='legacy'?data.tasks.find(item=>item.id===id):domainData.tasks.find(item=>item.id===id)??data.tasks.find(item=>item.id===id);if(!task)return;if(task.serverBacked){openStudent(task.studentId,'strategy');setRecordSource('server');void strategyDomain.loadHistory(task).catch(error=>setNotice({title:'Не удалось загрузить историю задачи',description:strategyErrorMessage(error)}))}else if(page==='strategies'&&recordSource==='legacy'&&studentId===task.studentId){setProfileTab('strategy');setProfileNavigationKey(key=>key+1)}else openLegacyStudent(task.studentId,'strategy');setFocusedTaskId(id);setModal('taskDetail') }
   const openReview = (id: string) => { const serverHomework=domainData.homeworks.find(h=>h.id===id&&!h.deletedAt);if(serverHomework){openStudent(serverHomework.studentId,'homework',id);return}const homework=data.homeworks.find(h=>h.id===id&&!h.deletedAt); if (homework) openLegacyStudent(homework.studentId,'homework',id) }
@@ -120,6 +143,7 @@ function App() {
     if (!draftTask?.title.trim()) return
     const serverManaged=Boolean(draftTask.serverBacked||domainData.students.some(item=>item.id===draftTask.studentId))
     if(serverManaged){if(formPendingRef.current)return;formPendingRef.current=true;setFormPending(true);setFormError('');try{await (draftTask.serverBacked?strategyDomain.updateTask(draftTask):strategyDomain.createTask(draftTask));setModal(null)}catch(error){setFormError(strategyErrorMessage(error))}finally{formPendingRef.current=false;setFormPending(false)}return}
+    if(serverCutover||hasServerCutover()){setServerCutover(true);setModal(null);setNotice({title:'Локальные данные доступны только для скачивания',description:'После миграции изменения сохраняются только на сервере'});return}
     if (['pending','revision'].includes(draftTask.reviewStatus) && data.tasks.find(task=>task.id===draftTask.id)?.studyStatus !== draftTask.studyStatus) {
       setNotice({title:'Статус пока недоступен',description:'Сначала завершите проверку или доработку в домашнем задании'})
       return
@@ -156,6 +180,7 @@ function App() {
   const restoreStudent=(s:Student)=>setConfirmState({title:'Восстановить профиль?',description:`Профиль «${s.name}» снова появится среди активных`,confirmLabel:'Восстановить',action:async()=>{await serverDomain.setStudentArchived(s,false)},getErrorMessage:groupStudentErrorMessage})
   const removeTask = (task: StrategyTask) => {
     if(task.serverBacked){const restoring=Boolean(task.archivedAt);setConfirmState({title:restoring?'Восстановить задачу?':'Переместить задачу в архив?',description:restoring?`«${task.title}» снова появится в активной стратегии`:`«${task.title}» сохранится вместе с историей и согласованием`,confirmLabel:restoring?'Восстановить':'Переместить в архив',action:async()=>{await strategyDomain.setTaskArchived(task,!restoring);setModal(null)},getErrorMessage:strategyErrorMessage});return}
+    if(serverCutover||hasServerCutover()){setServerCutover(true);setModal(null);setNotice({title:'Локальные данные доступны только для скачивания',description:'После миграции изменения сохраняются только на сервере'});return}
     const linkedHomeworks=data.homeworks.filter(homework=>homework.items.some(item=>item.taskId===task.id)).length
     const linkedLabel=linkedHomeworks?` Связанные домашние задания (${linkedHomeworks}) и их снимки останутся в истории.`:''
     setConfirmState({title:'Удалить задачу?',description:`«${task.title}» исчезнет из активной стратегии и очереди Ани.${linkedLabel}`,confirmLabel:'Удалить задачу',danger:true,action:()=>{
@@ -164,10 +189,10 @@ function App() {
       dataRef.current=next;setData(next);setModal(null)
     }})
   }
-  const exportBackup = () => { const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `kuratorskaya-backup-${today()}.json`; a.click(); URL.revokeObjectURL(url) }
+  const exportBackup = () => { const raw=localStorage.getItem(STORAGE_KEY)??JSON.stringify(data,null,2);const blob = new Blob([raw], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `kuratorskaya-browser-backup-${today()}.json`; a.click(); URL.revokeObjectURL(url) }
   const exportBeforeImport = () => { const raw=localStorage.getItem(`${STORAGE_KEY}-before-strategies-import`);if(!raw)return;const blob=new Blob([raw],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`kuratorskaya-before-import-${today()}.json`;a.click();URL.revokeObjectURL(url) }
   const exportBeforeSections = () => { const raw=localStorage.getItem(PRE_SECTION_BACKUP_KEY);if(!raw)return;const blob=new Blob([raw],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`kuratorskaya-before-section-strategies-${today()}.json`;a.click();URL.revokeObjectURL(url) }
-  const importBackup = async (file?: File) => { if (!file) return; try { const json: unknown = JSON.parse(await file.text()); if (!isAppData(json)) throw new Error(); const restored=normalizeData(json);setConfirmState({title:'Восстановить резервную копию?',description:'Текущие данные в браузере будут заменены данными из выбранного файла',confirmLabel:'Восстановить данные',danger:true,action:()=>{setData(restored);setGroupId(null);setStudentId(null);setPage('overview');setModal(null)}}) } catch { setNotice({title:'Не удалось открыть файл',description:'Нужна резервная копия приложения в формате JSON'}) } }
+  const completeCutover=async()=>{setServerCutover(true);setRecordSource('server');setGroupId(null);setStudentId(null);setModal(null);await Promise.allSettled([serverDomain.load(),strategyDomain.load(),learningDomain.load()])}
 
   const attention = useMemo(() => domainData.students.filter(s => domainData.groups.some(g => g.id === s.groupId && g.status === 'active')).map(s => {
     const tasks = studentTasks(domainData, s.id)
@@ -195,8 +220,8 @@ function App() {
       <AnimatePresence initial={false}>{searchOpen && <motion.div key="search" className="toolbar-search-panel" {...calm.popover}><input autoFocus aria-label="Поиск группы или ученицы" placeholder="Группа или ученица" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>{normalizedSearch && <div className="toolbar-search-results">{foundStudents.map(s => <button key={s.id} onClick={() => { openStudent(s.id); setSearchOpen(false); setSearchTerm('') }}><strong>{s.name}</strong><small>{domainData.groups.find(group=>group.id===s.groupId)?.name||'Группа не найдена'} · ученица</small></button>)}{foundGroups.map(g => <button key={g.id} onClick={() => { openGroup(g.id); setSearchOpen(false); setSearchTerm('') }}><strong>{g.name}</strong><small>Группа</small></button>)}{!foundStudents.length && !foundGroups.length && <p>Ничего не найдено</p>}</div>}</motion.div>}</AnimatePresence>
     </header>
     <main className={`main ${page === 'overview' ? 'overview-main' : ''}`}>
-      {saveError && <div className="save-error">Не удалось сохранить данные в браузере. Экспортируйте резервную копию и проверьте свободное место</div>}
-      {hasDemo&&!domainPage && <div className="demo-banner"><span><strong>Демонстрационные данные</strong> Четыре тестовые группы и профили можно редактировать</span><button onClick={() => setConfirmState({title:'Убрать демонстрационные данные?',description:'Тестовые группы, ученицы, задачи, домашние задания и встречи будут удалены. Ваши собственные записи сохранятся',confirmLabel:'Убрать пример',danger:true,action:()=>{setData(d => ({ ...d, demo: false, groups: d.groups.filter(g => !g.id.startsWith('demo-')), students: d.students.filter(s => !s.id.startsWith('demo-')), tasks: d.tasks.filter(t => !t.id.startsWith('demo-')), meetings: d.meetings.filter(m => !m.id.startsWith('demo-')),homeworks:d.homeworks.filter(h=>!h.studentId.startsWith('demo-')) }));setGroupId(null);setStudentId(null);setPage('overview')}})}>Убрать пример</button></div>}
+      {saveError&&!serverCutover && <div className="save-error">Не удалось сохранить данные в браузере. Экспортируйте резервную копию и проверьте свободное место</div>}
+      {hasDemo&&!domainPage&&!serverCutover && <div className="demo-banner"><span><strong>Демонстрационные данные</strong> Четыре тестовые группы и профили можно редактировать</span><button onClick={() => setConfirmState({title:'Убрать демонстрационные данные?',description:'Тестовые группы, ученицы, задачи, домашние задания и встречи будут удалены. Ваши собственные записи сохранятся',confirmLabel:'Убрать пример',danger:true,action:()=>{setData(d => ({ ...d, demo: false, groups: d.groups.filter(g => !g.id.startsWith('demo-')), students: d.students.filter(s => !s.id.startsWith('demo-')), tasks: d.tasks.filter(t => !t.id.startsWith('demo-')), meetings: d.meetings.filter(m => !m.id.startsWith('demo-')),homeworks:d.homeworks.filter(h=>!h.studentId.startsWith('demo-')) }));setGroupId(null);setStudentId(null);setPage('overview')}})}>Убрать пример</button></div>}
       <div className="content"><div className="page-motion">
         {domainPage&&(serverDomain.status==='loading'||(page==='overview'&&strategyDomain.status==='loading'))&&<div className="account-state" role="status"><span className="account-spinner"/>Загружаем группы, профили и стратегии…</div>}
         {domainPage&&serverDomain.status==='error'&&<div className="account-state account-state-error" role="alert"><strong>Не удалось загрузить группы и профили</strong><p>{groupStudentErrorMessage(serverDomain.error)}</p><button className="btn secondary" onClick={()=>void serverDomain.load()}>Повторить</button></div>}
@@ -212,13 +237,14 @@ function App() {
         {page === 'prompts' && <Suspense fallback={<div className="knowledge-loading">Загружаем библиотеку…</div>}><KnowledgePage kind="prompts"/></Suspense>}
         {page === 'textbook' && <Suspense fallback={<div className="knowledge-loading">Загружаем учебник…</div>}><KnowledgePage kind="chapters"/></Suspense>}
         {page === 'accounts' && <AccountAdminPage currentUser={currentUser} onRefreshUser={refreshCurrentUser}/>}
+        {page === 'migration' && <MigrationPage currentUser={currentUser} onCutover={completeCutover}/>}
       </div></div>
     </main>
     <Dialog open={modal === 'group'&&Boolean(draftGroup)} title={draftGroup&&(draftGroup.serverBacked||data.groups.some(item=>item.id===draftGroup.id)) ? 'Редактировать группу' : 'Новая группа'} onClose={() => {if(!formPending)setModal(null)}} dismissible={!formPending}>{draftGroup&&<GroupForm draft={draftGroup} setDraft={setDraftGroup} onSave={()=>{void saveGroup()}} onCancel={() => setModal(null)} pending={formPending} error={formError}/>}</Dialog>
     <Dialog open={modal === 'student'&&Boolean(draftStudent)} title={draftStudent&&(draftStudent.serverBacked||data.students.some(item=>item.id===draftStudent.id)) ? 'Профиль ученицы' : 'Новая ученица'} onClose={() => {if(!formPending)setModal(null)}} dismissible={!formPending} wide>{draftStudent&&<StudentForm draft={draftStudent} setDraft={setDraftStudent} groups={formSource==='legacy'?data.groups:domainData.groups} onSave={()=>{void saveStudent()}} onCancel={() => setModal(null)} pending={formPending} error={formError} groupLocked photoUploadEnabled={formSource==='legacy'}/>}</Dialog>
     <Dialog open={modal === 'taskDetail'&&Boolean(focusedTask)} title={focusedTask&&hasTechnicalUntitledTitle(focusedTask)?'Задача':focusedTask?.title||'Задача'} onClose={() => setModal(null)} wide>{focusedTask&&<TaskDetail task={focusedTask} studentName={focusedStudent?.name||''} groupName={focusedGroup?.name||''} sectionTitle={(focusedTask.serverBacked?domainData.sections:data.sections).find(section=>section.id===focusedTask.sectionId)?.title} onStatus={status=>changeStudyStatus(focusedTask.id,status)} onPrepareApproval={()=>{if(focusedTask.serverBacked){void strategyDomain.createApproval(focusedTask).catch(error=>setNotice({title:'Не удалось создать согласование',description:strategyErrorMessage(error)}));return}changeTask(focusedTask.id,{approvalStatus:'to_send'},'Подготовлено согласование с Аней')}} homeworkTitle={focusedHomework?.title} onHomework={focusedHomework?()=>{setModal(null);setFocusedHomeworkId(focusedHomework.id);setProfileTab('homework');setProfileNavigationKey(key=>key+1)}:undefined} onEdit={()=>{setFormError('');setDraftTask({...focusedTask});setModal('task')}} canEdit={focusedTaskWritable}/>}</Dialog>
     <Dialog open={modal === 'task'&&Boolean(draftTask)} title={draftTask&&(draftTask.serverBacked||data.tasks.some(task=>task.id===draftTask.id))?'Редактировать задачу':'Новая задача'} onClose={()=>{if(!formPending)setModal(null)}} dismissible={!formPending} wide>{draftTask&&<TaskForm draft={draftTask} setDraft={setDraftTask} sections={(draftTask.serverBacked||domainData.students.some(item=>item.id===draftTask.studentId)?domainData.sections:data.sections).filter(section=>section.studentId===draftTask.studentId)} existing={Boolean(draftTask.serverBacked||data.tasks.some(task=>task.id===draftTask.id))} serverManaged={Boolean(draftTask.serverBacked||domainData.students.some(item=>item.id===draftTask.studentId))} pending={formPending} error={formError} onSave={()=>{void saveTask()}} onCancel={()=>setModal(null)} onDelete={()=>removeTask(draftTask)}/>}</Dialog>
-    <Dialog open={modal === 'backup'} title="Данные и резервные копии" onClose={() => setModal(null)}><div className="backup-content"><p>Группы и профили загружаются с сервера. Эта копия сохраняет прежние локальные данные, стратегии, встречи и домашние задания до отдельного этапа миграции</p><button className="btn primary full" onClick={exportBackup}><Download size={17}/> Скачать резервную копию</button>{localStorage.getItem(PRE_SECTION_BACKUP_KEY)&&<button className="btn secondary full" onClick={exportBeforeSections}><Download size={17}/> Скачать копию до обновления стратегий</button>}{localStorage.getItem(`${STORAGE_KEY}-before-strategies-import`)&&<button className="btn secondary full" onClick={exportBeforeImport}><Download size={17}/> Скачать копию до импорта стратегий</button>}<button className="btn secondary full" onClick={() => fileInput.current?.click()}><Upload size={17}/> Восстановить из файла</button>{Boolean(data.importConflicts?.length)&&<div><strong>Требуют сверки после импорта</strong><ul>{data.importConflicts?.map(item=><li key={item}>{item}</li>)}</ul></div>}<input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={e => { void importBackup(e.target.files?.[0]); e.target.value = '' }}/></div></Dialog>
+    <Dialog open={modal === 'backup'} title="Данные и резервные копии" onClose={() => setModal(null)}><div className="backup-content"><p>{serverCutover?'Рабочие данные загружаются только с сервера. Локальные копии сохранены без изменений и доступны для скачивания':'Группы и профили загружаются с сервера. Локальная копия сохраняется отдельно до подтверждённой миграции'}</p><button className="btn primary full" onClick={exportBackup}><Download size={17}/> Скачать локальную копию из браузера</button>{localStorage.getItem(PRE_SECTION_BACKUP_KEY)&&<button className="btn secondary full" onClick={exportBeforeSections}><Download size={17}/> Скачать копию до обновления стратегий</button>}{localStorage.getItem(`${STORAGE_KEY}-before-strategies-import`)&&<button className="btn secondary full" onClick={exportBeforeImport}><Download size={17}/> Скачать копию до импорта стратегий</button>}{currentUser.is_owner&&<button className="btn secondary full" onClick={() => {setModal(null);openPage('migration')}}><Database size={17}/> Открыть миграцию и логическую серверную копию</button>}{Boolean(data.importConflicts?.length)&&<div><strong>Требуют сверки в локальной копии</strong><p>Подробности доступны только в исходной локальной копии и не переносятся автоматически</p></div>}</div></Dialog>
     {confirmState?.danger?<DeleteConfirmDialog open title={confirmState.title} description={confirmState.description} confirmLabel={confirmState.confirmLabel} getErrorMessage={confirmState.getErrorMessage} onConfirm={confirmState.action} onClose={()=>setConfirmState(null)}/>:<ConfirmDialog open={Boolean(confirmState)} title={confirmState?.title||''} description={confirmState?.description||''} confirmLabel={confirmState?.confirmLabel} getErrorMessage={confirmState?.getErrorMessage} onConfirm={confirmState?.action||(()=>{})} onClose={()=>setConfirmState(null)}/>}
     <NoticeDialog open={Boolean(notice)} title={notice?.title||''} description={notice?.description||''} onClose={()=>setNotice(null)}/>
   </div>

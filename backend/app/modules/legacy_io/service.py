@@ -129,8 +129,13 @@ ALLOWED_KEYS = {
 ALLOWED_ITEM_KEYS = {"taskId", "title", "description", "url", "materials", "dueAt"}
 
 
-def canonical_checksum(source: dict[str, Any]) -> str:
-    encoded = json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+def canonical_checksum(source: dict[str, Any], curator_assignments: dict[str, str]) -> str:
+    encoded = json.dumps(
+        {"source": source, "curator_assignments": curator_assignments},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
@@ -193,7 +198,7 @@ def validate_legacy(
 ) -> ValidationReport:
     ensure_owner(actor)
     source = payload.source
-    checksum = canonical_checksum(source)
+    checksum = canonical_checksum(source, payload.curator_assignments)
     conflicts: list[ImportIssue] = []
     warnings: list[str] = []
     version = source.get("version")
