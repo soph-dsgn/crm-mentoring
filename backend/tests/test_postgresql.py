@@ -401,13 +401,21 @@ def test_postgresql_legacy_import_authorization_and_csrf(
     import_cases.test_validate_is_owner_only_and_writes_nothing(postgresql_learning_api)
 
 
-def test_postgresql_knowledge_expected_version_and_favorites(
+def test_postgresql_knowledge_expected_version(
     postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     _, factory = postgresql_learning_api
     with factory.begin() as database:
         database.get(KnowledgeLibraryState, 1).status = KnowledgeLibraryStatus.ACTIVE
     knowledge_cases.test_concurrent_curator_edits_allow_exactly_one_writer(postgresql_learning_api)
+
+
+def test_postgresql_knowledge_personal_favorites(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    _, factory = postgresql_learning_api
+    with factory.begin() as database:
+        database.get(KnowledgeLibraryState, 1).status = KnowledgeLibraryStatus.ACTIVE
     knowledge_cases.test_personal_favorites_do_not_change_shared_version(postgresql_learning_api)
 
 
