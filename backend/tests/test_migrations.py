@@ -41,6 +41,8 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "homework_items",
             "homeworks",
             "import_runs",
+            "knowledge_documents",
+            "knowledge_favorites",
             "legacy_id_mappings",
             "login_attempts",
             "meetings",
@@ -72,6 +74,20 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "name",
             "version",
         }
+        assert {column["name"] for column in inspector.get_columns("knowledge_documents")} >= {
+            "kind",
+            "title",
+            "html",
+            "plain_text",
+            "search_text",
+            "archived_at",
+            "version",
+        }
+        assert {column["name"] for column in inspector.get_columns("knowledge_favorites")} >= {
+            "user_id",
+            "document_id",
+            "created_at",
+        }
         assert {column["name"] for column in inspector.get_columns("strategy_tasks")} >= {
             "review_status"
         }
@@ -84,6 +100,23 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "ix_audit_events_actor_user_id",
             "ix_audit_events_target_group_id",
             "ix_audit_events_target_user_id",
+        }
+        assert {index["name"] for index in inspector.get_indexes("knowledge_documents")} >= {
+            "ix_knowledge_documents_category",
+            "ix_knowledge_documents_kind_archived",
+            "ix_knowledge_documents_updated_id",
+        }
+        favorite_foreign_keys = {
+            constraint["name"]: constraint
+            for constraint in inspector.get_foreign_keys("knowledge_favorites")
+        }
+        assert favorite_foreign_keys["fk_knowledge_favorites_user_users"]["options"] == {
+            "ondelete": "CASCADE",
+            "onupdate": "RESTRICT",
+        }
+        assert favorite_foreign_keys["fk_knowledge_favorites_document_documents"]["options"] == {
+            "ondelete": "CASCADE",
+            "onupdate": "RESTRICT",
         }
         audit_foreign_keys = {
             constraint["name"]: constraint

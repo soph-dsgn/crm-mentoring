@@ -47,6 +47,10 @@ class AuditAction(enum.StrEnum):
     HOMEWORK_ARCHIVED = "homework_archived"
     HOMEWORK_RESTORED = "homework_restored"
     LEGACY_IMPORTED = "legacy_imported"
+    KNOWLEDGE_CREATED = "knowledge_created"
+    KNOWLEDGE_UPDATED = "knowledge_updated"
+    KNOWLEDGE_ARCHIVED = "knowledge_archived"
+    KNOWLEDGE_RESTORED = "knowledge_restored"
 
 
 class AuditEvent(Base):
