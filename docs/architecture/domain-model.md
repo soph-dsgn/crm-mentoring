@@ -93,6 +93,13 @@ optimistic version и soft archive. Активное состояние UI вс�
 запрещён. Browser `KnowledgeData v1` остаётся отдельным источником до будущего подтверждённого
 import/cutover этапа.
 
+`KnowledgeLibraryState` — singleton server source-of-truth для `pending|active`. Initial import
+доступен только owner и активирует библиотеку в одной транзакции. `KnowledgeImportRun` хранит
+confirmation checksum, отдельный request checksum, source format/mode, actor и безопасные counts.
+`KnowledgeImportMapping` хранит opaque source key, server fingerprint и target document; исходный
+HTML или browser filename в mapping/audit не сохраняются. Import provenance отделён от generic
+AppData migration и от learning-domain entities.
+
 ## Инварианты БД и сервисов
 
 - даты и статусы группы не каскадируют статус стратегии;
@@ -112,4 +119,6 @@ import/cutover этапа.
 - внешние legacy ID сохраняются в таблице соответствий импорта, а не становятся бизнес-ключами.
 - Knowledge documents не содержат внешних ключей на learning-domain таблицы; favorite lifecycle
   не меняет общий документ, а stale document writes завершаются `409`.
+- validate-only Knowledge import не создаёт documents/runs/mappings; cutover и import commit
+  атомарны, а failed import не переводит library state в `active`.
 

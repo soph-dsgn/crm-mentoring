@@ -127,8 +127,22 @@ Student может только narrowly scoped submit/resubmit собствен
 Student не имеет доступа к Knowledge routes. Mutations используют session cookie, CSRF и
 same-origin. Request body ограничен 1 MiB, HTML — 500 000 символов; server allowlist исключает
 scripts, embedded objects, images, inline styles, event attributes и unsafe URI schemes.
-KnowledgeData v1 import/migration, cutover и frontend API integration остаются отдельным этапом;
-существующая IndexedDB не читается и не изменяется этим backend foundation.
+Существующая IndexedDB не читается и не изменяется backend автоматически.
+
+| Method и route | Scope | Contract | Frontend boundary |
+|---|---|---|---|
+| `GET /api/v1/knowledge/library-state` | active admin | `pending|active`, version, activation time | Использовать server state, не browser marker |
+| `POST /api/v1/knowledge/imports/validate` | owner initial; admin additional after active | source/options → counts/items/issues/checksum; no writes | Preview и confirmation — отдельные действия |
+| `POST /api/v1/knowledge/imports` | тот же scope | `confirm=true` + preview checksum → atomic result/replay | Не делать blind retry с новым payload |
+| `GET /api/v1/knowledge/export` | owner | logical JSON: state/documents/favorites/import provenance | Не называть operational PostgreSQL backup |
+
+Backend принимает неизменённый `KnowledgeData v1` либо `parsed_documents`: HTML, уже полученный из
+DOCX/HTML/Markdown существующим frontend parser, плюс исходный format. Бинарные файлы не загружаются.
+Полный import request ограничен 5 MiB.
+Checksum связывает source, mode, resolutions, actor и preview targets/versions; `409
+validation_changed` требует повторного validate. До initial activation document API отвечает `409
+knowledge_library_pending`. Browser records и IndexedDB должны оставаться нетронутыми до отдельной
+Milestone 8.3 UI/cutover процедуры; автоматический import на startup запрещён.
 
 Источники: `backend/app/api/routes/knowledge.py`, `backend/app/modules/knowledge/`.
 

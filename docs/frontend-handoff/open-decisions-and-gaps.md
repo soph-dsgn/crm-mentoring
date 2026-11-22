@@ -7,7 +7,7 @@
 | Перенос Student между groups | BLOCKED BY BACKEND | Скрыть local action; спроектировать отдельную атомарную команду |
 | Delete/archive StrategySection | BLOCKED BY BACKEND | Не вызывать локальное delete после cutover |
 | Перенос Task между sections | BLOCKED BY BACKEND | Разрешать reorder только внутри section |
-| Knowledge records/sync | BLOCKED BY BACKEND | Не смешивать с strategies/homeworks |
+| Knowledge records/sync | BACKEND READY, FRONTEND LOCAL | Milestone 8.3 должен использовать server state/import API и сохранить IndexedDB backup |
 | File uploads | MISSING | Хранить только поддерживаемые links/text; отдельный будущий scope |
 | Student product shell | MISSING frontend | Создать после auth и core domain integration |
 

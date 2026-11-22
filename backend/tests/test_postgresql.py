@@ -24,6 +24,7 @@ from app.db.session import build_engine, get_db
 from app.main import create_app
 from app.modules.auth.passwords import PasswordManager
 from app.modules.groups.models import Group, GroupStatus
+from app.modules.knowledge.models import KnowledgeLibraryState, KnowledgeLibraryStatus
 from app.modules.legacy_io.models import ImportRun
 from app.modules.legacy_io.service import restore_backup
 from app.modules.strategies.models import StrategyTask
@@ -32,6 +33,7 @@ from app.modules.users.audit import AuditAction, AuditEvent
 from app.modules.users.models import User, UserRole
 from tests import test_groups_students_api as group_cases
 from tests import test_knowledge_api as knowledge_cases
+from tests import test_knowledge_import_api as knowledge_import_cases
 from tests import test_legacy_import_export as import_cases
 from tests import test_meetings_homeworks_api as homework_cases
 from tests import test_strategies_tasks_api as strategy_cases
@@ -118,6 +120,9 @@ def test_postgresql_clean_upgrade_metadata_and_downgrade() -> None:
             "legacy_id_mappings",
             "knowledge_documents",
             "knowledge_favorites",
+            "knowledge_import_mappings",
+            "knowledge_import_runs",
+            "knowledge_library_state",
         }
     finally:
         engine.dispose()
@@ -175,7 +180,7 @@ def test_postgresql_upgrade_from_previous_head_preserves_existing_data() -> None
                 "Student"
             )
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "20261121_0010"
+                "20261122_0011"
             )
     finally:
         engine.dispose()
@@ -394,8 +399,43 @@ def test_postgresql_legacy_import_authorization_and_csrf(
 def test_postgresql_knowledge_expected_version_and_favorites(
     postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
+    _, factory = postgresql_learning_api
+    with factory.begin() as database:
+        database.get(KnowledgeLibraryState, 1).status = KnowledgeLibraryStatus.ACTIVE
     knowledge_cases.test_concurrent_curator_edits_allow_exactly_one_writer(postgresql_learning_api)
     knowledge_cases.test_personal_favorites_do_not_change_shared_version(postgresql_learning_api)
+
+
+def test_postgresql_knowledge_import_is_concurrently_idempotent(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    knowledge_import_cases.test_concurrent_identical_initial_imports_create_one_run(
+        postgresql_learning_api
+    )
+
+
+def test_postgresql_knowledge_cutover_allows_one_concurrent_source(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    knowledge_import_cases.test_concurrent_different_initial_imports_allow_one_cutover(
+        postgresql_learning_api
+    )
+
+
+def test_postgresql_additional_knowledge_imports_serialize_same_source(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    knowledge_import_cases.assert_concurrent_additional_imports_serialize_same_source(
+        postgresql_learning_api
+    )
+
+
+def test_postgresql_knowledge_import_rolls_back_activation(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]], monkeypatch
+) -> None:
+    knowledge_import_cases.test_audit_failure_rolls_back_import_and_activation(
+        postgresql_learning_api, monkeypatch
+    )
 
 
 def test_postgresql_legacy_import_rolls_back_after_audit_failure(

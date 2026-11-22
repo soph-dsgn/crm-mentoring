@@ -7,6 +7,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.homeworks import router as homeworks_router
 from app.api.routes.imports import router as imports_router
 from app.api.routes.knowledge import router as knowledge_router
+from app.api.routes.knowledge_imports import router as knowledge_imports_router
 from app.api.routes.meetings import router as meetings_router
 from app.api.routes.strategies import router as strategies_router
 from app.api.routes.students import router as students_router
@@ -22,3 +23,4 @@ api_router.include_router(meetings_router)
 api_router.include_router(homeworks_router)
 api_router.include_router(imports_router)
 api_router.include_router(knowledge_router)
+api_router.include_router(knowledge_imports_router)
