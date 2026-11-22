@@ -51,6 +51,8 @@ class AuditAction(enum.StrEnum):
     KNOWLEDGE_UPDATED = "knowledge_updated"
     KNOWLEDGE_ARCHIVED = "knowledge_archived"
     KNOWLEDGE_RESTORED = "knowledge_restored"
+    KNOWLEDGE_IMPORTED = "knowledge_imported"
+    KNOWLEDGE_LIBRARY_ACTIVATED = "knowledge_library_activated"
 
 
 class AuditEvent(Base):

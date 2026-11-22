@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
 from app.api.pagination import decode_cursor, encode_cursor
+from app.modules.knowledge.library import require_library_active
 from app.modules.knowledge.models import KnowledgeDocument, KnowledgeFavorite, KnowledgeKind
 from app.modules.knowledge.sanitizer import sanitize_knowledge_html
 from app.modules.knowledge.schemas import KnowledgeCreate, KnowledgeUpdate
@@ -39,6 +40,7 @@ def get_document(
     database: Session, actor: User, document_id: str
 ) -> tuple[KnowledgeDocument, bool]:
     ensure_admin(actor)
+    require_library_active(database)
     document = database.get(KnowledgeDocument, document_id)
     if document is None:
         raise _not_found()
@@ -59,6 +61,7 @@ def list_documents(
     limit: int,
 ) -> tuple[list[tuple[KnowledgeDocument, bool]], str | None]:
     ensure_admin(actor)
+    require_library_active(database)
     conditions = []
     if kind is not None:
         conditions.append(KnowledgeDocument.kind == kind)
@@ -118,6 +121,7 @@ def create_document(
     payload: KnowledgeCreate,
 ) -> KnowledgeDocument:
     ensure_admin(actor)
+    require_library_active(database, for_update=True)
     sanitized_html, plain_text = sanitize_knowledge_html(payload.html)
     document = KnowledgeDocument(
         kind=payload.kind,
@@ -149,6 +153,7 @@ def update_document(
     now: datetime,
 ) -> KnowledgeDocument:
     ensure_admin(actor)
+    require_library_active(database, for_update=True)
     if document.archived_at is not None:
         raise _conflict("document_archived", "Archived Knowledge document is read-only")
     values = payload.model_dump(exclude={"expected_version"}, exclude_unset=True)
@@ -199,6 +204,7 @@ def _change_archive_state(
     now: datetime,
 ) -> KnowledgeDocument:
     ensure_admin(actor)
+    require_library_active(database, for_update=True)
     if (document.archived_at is None) == (archived_at is None):
         code = "document_not_archived" if archived_at is None else "document_archived"
         raise _conflict(code, "Knowledge document is already in the requested state")
@@ -272,6 +278,7 @@ def restore_document(
 
 def add_favorite(database: Session, actor: User, document: KnowledgeDocument) -> None:
     ensure_admin(actor)
+    require_library_active(database, for_update=True)
     if database.get(KnowledgeFavorite, (actor.id, document.id)) is not None:
         return
     try:
@@ -285,6 +292,7 @@ def add_favorite(database: Session, actor: User, document: KnowledgeDocument) ->
 
 def remove_favorite(database: Session, actor: User, document: KnowledgeDocument) -> None:
     ensure_admin(actor)
+    require_library_active(database, for_update=True)
     database.execute(
         delete(KnowledgeFavorite).where(
             KnowledgeFavorite.user_id == actor.id,

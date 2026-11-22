@@ -116,6 +116,10 @@ cursor. Групповой список учениц доступен тольк
 | POST | `/api/v1/knowledge/documents/{id}/restore` | восстановить архивный материал |
 | POST | `/api/v1/knowledge/documents/{id}/favorite` | идемпотентно добавить в личное избранное |
 | POST | `/api/v1/knowledge/documents/{id}/unfavorite` | идемпотентно убрать из личного избранного |
+| GET | `/api/v1/knowledge/library-state` | серверный `pending|active` cutover state |
+| POST | `/api/v1/knowledge/imports/validate` | validate-only preview KnowledgeData v1 или разобранных документов |
+| POST | `/api/v1/knowledge/imports` | подтверждённый атомарный import/cutover |
+| GET | `/api/v1/knowledge/export` | owner-only logical Knowledge JSON backup |
 
 Knowledge Base доступна только active admin; student не получает ни список, ни отдельный документ.
 Общий документ и персональное избранное хранятся раздельно, поэтому favorite mutation не меняет
@@ -123,7 +127,19 @@ Knowledge Base доступна только active admin; student не полу
 представление формируются сервером. Все mutations требуют cookie-session, CSRF и same-origin.
 Request body ограничен 1 MiB, содержимое одного документа — 500 000 символов. Устаревший
 `expected_version` возвращает `409 version_conflict`. File import, KnowledgeData migration,
-server cutover и frontend API integration в foundation-контракт не входят.
+frontend API integration в этот контракт не входит.
+
+До initial cutover библиотека имеет server-state `pending`, и обычный document API возвращает
+`409 knowledge_library_pending`. Initial validate/import доступен только owner; успешный import
+атомарно создаёт документы, favorites, import run/mappings и переводит state в `active`. После
+активации любой active admin может выполнять `additional` import. Validate никогда не пишет данные.
+Confirmation checksum связывает source, mode, resolutions, actor и фактический preview targets/
+versions; изменение source или server state требует новой проверки. Повтор подтверждённого request
+checksum возвращает исходный result без дублей. Parsed DOCX/HTML/Markdown означает уже разобранный
+клиентом HTML с указанием исходного формата; binary upload не поддерживается. Import всегда повторно
+применяет server sanitizer. Конфликты по source mapping или title требуют `skip`, `create_copy` либо
+versioned `overwrite`. Logical export включает documents, favorites, state и import provenance;
+это не operational PostgreSQL backup. Полный import request ограничен 5 MiB.
 
 ## Импорт, экспорт и файлы
 

@@ -3,7 +3,17 @@
 from app.modules.auth.models import AuthSession, LoginAttempt
 from app.modules.groups.models import Group, GroupStatus
 from app.modules.homeworks.models import Homework, HomeworkHistory, HomeworkItem, HomeworkStatus
-from app.modules.knowledge.models import KnowledgeDocument, KnowledgeFavorite, KnowledgeKind
+from app.modules.knowledge.models import (
+    KnowledgeDocument,
+    KnowledgeFavorite,
+    KnowledgeImportMapping,
+    KnowledgeImportMode,
+    KnowledgeImportRun,
+    KnowledgeKind,
+    KnowledgeLibraryState,
+    KnowledgeLibraryStatus,
+    KnowledgeSourceFormat,
+)
 from app.modules.legacy_io.models import ImportRun, LegacyIdMapping
 from app.modules.meetings.models import Meeting
 from app.modules.strategies.models import (
@@ -35,7 +45,13 @@ __all__ = [
     "LoginAttempt",
     "KnowledgeDocument",
     "KnowledgeFavorite",
+    "KnowledgeImportMapping",
+    "KnowledgeImportMode",
+    "KnowledgeImportRun",
     "KnowledgeKind",
+    "KnowledgeLibraryState",
+    "KnowledgeLibraryStatus",
+    "KnowledgeSourceFormat",
     "Meeting",
     "Student",
     "StudentStage",

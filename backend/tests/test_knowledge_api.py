@@ -15,7 +15,11 @@ from app.db.session import build_engine, get_db
 from app.main import create_app
 from app.modules.auth.passwords import PasswordManager
 from app.modules.knowledge import service as knowledge_service
-from app.modules.knowledge.models import KnowledgeDocument
+from app.modules.knowledge.models import (
+    KnowledgeDocument,
+    KnowledgeLibraryState,
+    KnowledgeLibraryStatus,
+)
 from app.modules.knowledge.sanitizer import sanitize_knowledge_html
 from app.modules.users.audit import AuditAction, AuditEvent
 from app.modules.users.models import User, UserRole
@@ -29,6 +33,8 @@ def knowledge_api(tmp_path) -> Iterator[tuple[TestClient, sessionmaker[Session]]
     engine = build_engine(database_url)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory.begin() as database:
+        database.add(KnowledgeLibraryState(id=1, status=KnowledgeLibraryStatus.ACTIVE, version=1))
     settings = Settings(
         environment="test",
         database_url=database_url,

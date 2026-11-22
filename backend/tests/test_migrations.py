@@ -43,6 +43,9 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "import_runs",
             "knowledge_documents",
             "knowledge_favorites",
+            "knowledge_import_mappings",
+            "knowledge_import_runs",
+            "knowledge_library_state",
             "legacy_id_mappings",
             "login_attempts",
             "meetings",
@@ -88,6 +91,22 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
             "document_id",
             "created_at",
         }
+        assert {column["name"] for column in inspector.get_columns("knowledge_import_runs")} >= {
+            "checksum",
+            "request_checksum",
+            "source_version",
+            "source_format",
+            "mode",
+            "actor_user_id",
+            "counts",
+        }
+        assert {
+            column["name"] for column in inspector.get_columns("knowledge_import_mappings")
+        } >= {"import_run_id", "source_key", "source_fingerprint", "target_id"}
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT status, version FROM knowledge_library_state WHERE id = 1")
+            ).one() == ("pending", 1)
         assert {column["name"] for column in inspector.get_columns("strategy_tasks")} >= {
             "review_status"
         }
@@ -172,6 +191,71 @@ def test_initial_migration_upgrade_and_downgrade_clean_sqlite(tmp_path: Path) ->
         assert inspect(downgraded_engine).get_table_names() == ["alembic_version"]
     finally:
         downgraded_engine.dispose()
+
+
+def test_knowledge_cutover_migration_preserves_foundation_data(tmp_path: Path) -> None:
+    database_path = tmp_path / "knowledge-cutover.db"
+    database_url = f"sqlite+pysqlite:///{database_path.as_posix()}"
+    config = alembic_config(database_url)
+    command.upgrade(config, "20261121_0010")
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO users (
+                        id, login, normalized_login, role, password_hash,
+                        must_change_password, is_active, is_owner
+                    ) VALUES (
+                        'knowledge-owner', 'knowledge-owner', 'knowledge-owner',
+                        'admin', 'hash', false, true, true
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_documents (
+                        id, kind, title, html, plain_text, search_text, position,
+                        created_by_user_id, updated_by_user_id, version
+                    ) VALUES (
+                        'knowledge-document', 'prompt', 'Existing document',
+                        '<p>Existing content</p>', 'Existing content',
+                        'existing document existing content', 0,
+                        'knowledge-owner', 'knowledge-owner', 1
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_favorites (user_id, document_id)
+                    VALUES ('knowledge-owner', 'knowledge-document')
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text("SELECT plain_text FROM knowledge_documents WHERE id='knowledge-document'")
+                )
+                == "Existing content"
+            )
+            assert connection.scalar(text("SELECT count(*) FROM knowledge_favorites")) == 1
+            assert connection.execute(
+                text("SELECT status, version FROM knowledge_library_state WHERE id=1")
+            ).one() == ("pending", 1)
+    finally:
+        engine.dispose()
 
 
 def test_auth_migration_preserves_users_and_downgrades_to_domain_revision(tmp_path: Path) -> None:

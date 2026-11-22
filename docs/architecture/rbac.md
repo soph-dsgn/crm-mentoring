@@ -20,6 +20,9 @@
 | Читать свои материалы после выпуска | применимо | применимо | применимо | да |
 | Читать/изменять общую Knowledge Base | да | да | да | нет |
 | Менять личное избранное Knowledge Base | да | да | да | нет |
+| Initial Knowledge import и cutover | да | нет | нет | нет |
+| Additional Knowledge import после cutover | да | да | да | нет |
+| Logical Knowledge export | да | нет | нет | нет |
 
 Обычный admin может видеть безопасный список кураторов, но не может создавать, деактивировать,
 переназначать или повышать их до owner. Полномочия вычисляются только по данным БД, без привязки
@@ -137,4 +140,7 @@ level или схемы блокировок их необходимо повт�
 - favorite принадлежит actor и не изменяет общий document/version;
 - document mutations используют `expected_version`, CSRF и same-origin; физического delete нет;
 - audit содержит только actor, document ID, действие и версию, без HTML или plain text.
+- до `active` обычный document API закрыт; initial validate/import разрешён только owner;
+- после `active` additional import разрешён active admin, но export остаётся owner-only;
+- confirmation checksum actor-bound и preview-bound; import conflicts не обходят RBAC и CSRF.
 
