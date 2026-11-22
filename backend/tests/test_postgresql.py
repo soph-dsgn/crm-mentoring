@@ -51,8 +51,10 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 def _require_disposable_database_url(value: str) -> None:
     url = make_url(value)
-    if url.get_backend_name() != "postgresql" or not (
-        url.database and url.database.lower().endswith("_test")
+    if (
+        url.get_backend_name() != "postgresql"
+        or url.host not in {"127.0.0.1", "localhost", "::1"}
+        or not (url.database and url.database.lower().endswith("_test"))
     ):
         raise ValueError("PostgreSQL integration tests require a disposable test database")
 
@@ -62,10 +64,13 @@ if POSTGRES_URL:
 
 
 def test_postgresql_test_url_must_name_disposable_database() -> None:
-    with pytest.raises(ValueError, match="disposable test database"):
-        _require_disposable_database_url(
-            "postgresql+psycopg://crm:password@db.example/kuratorskaya"
-        )
+    unsafe_urls = (
+        "postgresql+psycopg://crm:password@127.0.0.1/kuratorskaya",
+        "postgresql+psycopg://crm:password@db.example/kuratorskaya_test",
+    )
+    for unsafe_url in unsafe_urls:
+        with pytest.raises(ValueError, match="disposable test database"):
+            _require_disposable_database_url(unsafe_url)
 
 
 def _alembic_config_for(database_url: str) -> Config:

@@ -58,6 +58,63 @@ jobs:
       - name: Check SQLAlchemy metadata against Alembic
         run: alembic check
 
+  backend-postgresql:
+    name: PostgreSQL Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      KURATORSKAYA_ENVIRONMENT: test
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: kuratorskaya_test
+          POSTGRES_USER: kuratorskaya
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432
+        volumes:
+          - /tmp/kuratorskaya-postgres-backups:/backup
+        options: >-
+          --health-cmd "pg_isready -U kuratorskaya -d kuratorskaya_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Prepare disposable backup directory
+        run: |
+          sudo mkdir -p /tmp/kuratorskaya-postgres-backups
+          sudo chown "$(id -u):$(id -g)" /tmp/kuratorskaya-postgres-backups
+          sudo chmod 0777 /tmp/kuratorskaya-postgres-backups
+
+      - name: Run PostgreSQL integration tests without skips
+        env:
+          KURATORSKAYA_DATABASE_URL: postgresql+psycopg://kuratorskaya:ci-only-password@127.0.0.1:${{ job.services.postgres.ports[5432] }}/kuratorskaya_test
+          KURATORSKAYA_TEST_POSTGRES_URL: postgresql+psycopg://kuratorskaya:ci-only-password@127.0.0.1:${{ job.services.postgres.ports[5432] }}/kuratorskaya_test
+          KURATORSKAYA_TEST_POSTGRES_TOOLS_CONTAINER: ${{ job.services.postgres.id }}
+          KURATORSKAYA_TEST_POSTGRES_BACKUP_DIR: /tmp/kuratorskaya-postgres-backups
+        run: |
+          pytest tests/test_postgresql.py --no-cov --junitxml=/tmp/postgresql.xml
+          python -c "import xml.etree.ElementTree as ET; root = ET.parse('/tmp/postgresql.xml').getroot(); skipped = sum(int(node.attrib.get('skipped', 0)) for node in root.iter('testsuite')); assert skipped == 0, f'{skipped} PostgreSQL tests were skipped'"
+
   frontend-quality:
     name: Frontend Quality
     runs-on: ubuntu-latest

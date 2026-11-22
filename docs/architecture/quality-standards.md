@@ -43,11 +43,14 @@ Targeted-проверки ускоряют итерацию, но не заме�
 ## Обязательные CI-проверки
 
 Workflow `.github/workflows/ci.yml` запускается для Pull Request в `main`, push в `main` и
-вручную. Он использует минимальное разрешение `contents: read` и содержит две обязательные jobs:
+вручную. Он использует минимальное разрешение `contents: read` и содержит три обязательные jobs:
 
 - **Backend Quality**: Python 3.13, установка dev-зависимостей, Ruff lint, Ruff format check,
   pytest с branch coverage и порогом 75%, `alembic upgrade head`, `alembic current`,
   `alembic check`
+- **PostgreSQL Integration**: изолированный PostgreSQL service container, полный
+  `tests/test_postgresql.py`, проверка отсутствия skipped tests, migrations, concurrency,
+  rollback и operational backup/restore на синтетических данных
 - **Frontend Quality**: Node.js 24 LTS, `npm ci`, ESLint, TypeScript/Vite build и существующая
   сценарная регрессия
 
