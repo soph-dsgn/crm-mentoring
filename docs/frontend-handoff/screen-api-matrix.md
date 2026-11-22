@@ -28,7 +28,7 @@
 | Homework draft and issue | assigned admin/owner | homework routes/transitions | PARTIALLY IMPLEMENTED locally | Use immutable snapshots; issue never completes task |
 | Student homework list/read/submit | student self | homework routes/transitions | MISSING student shell | Own only; submit/resubmit fields only |
 | Curator review/revision/acceptance | assigned admin/owner | homework transitions | PARTIALLY IMPLEMENTED locally | Task review/progress follow server result; no client recompute |
-| Prompts/favorites/textbook | curator/student TBD | no Knowledge API | IMPLEMENTED browser-local | Keep explicitly local or approve separate backend project |
+| Prompts/favorites/textbook | active admin | `/knowledge/documents` и lifecycle/favorite routes | Backend foundation готов; UI остаётся browser-local | Future PR: typed client, server states и отдельный KnowledgeData migration/cutover |
 | AppData validate/import | owner | legacy import routes | MISSING UI | Preview counts/conflicts, explicit checksum confirmation |
 | Logical business export | owner | `/exports/backup` | MISSING UI | Secure download; describe exclusions and Knowledge gap |
 | Session expiry on any screen | all | response `401` | MISSING | Stop mutations, preserve safe drafts, redirect to login |

@@ -31,6 +31,7 @@ from app.modules.students.models import Student
 from app.modules.users.audit import AuditAction, AuditEvent
 from app.modules.users.models import User, UserRole
 from tests import test_groups_students_api as group_cases
+from tests import test_knowledge_api as knowledge_cases
 from tests import test_legacy_import_export as import_cases
 from tests import test_meetings_homeworks_api as homework_cases
 from tests import test_strategies_tasks_api as strategy_cases
@@ -115,6 +116,8 @@ def test_postgresql_clean_upgrade_metadata_and_downgrade() -> None:
             "homework_history",
             "import_runs",
             "legacy_id_mappings",
+            "knowledge_documents",
+            "knowledge_favorites",
         }
     finally:
         engine.dispose()
@@ -172,7 +175,7 @@ def test_postgresql_upgrade_from_previous_head_preserves_existing_data() -> None
                 "Student"
             )
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "20261028_0009"
+                "20261121_0010"
             )
     finally:
         engine.dispose()
@@ -386,6 +389,13 @@ def test_postgresql_legacy_import_authorization_and_csrf(
     postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     import_cases.test_validate_is_owner_only_and_writes_nothing(postgresql_learning_api)
+
+
+def test_postgresql_knowledge_expected_version_and_favorites(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+) -> None:
+    knowledge_cases.test_concurrent_curator_edits_allow_exactly_one_writer(postgresql_learning_api)
+    knowledge_cases.test_personal_favorites_do_not_change_shared_version(postgresql_learning_api)
 
 
 def test_postgresql_legacy_import_rolls_back_after_audit_failure(

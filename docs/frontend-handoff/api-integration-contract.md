@@ -112,6 +112,26 @@ Student может только narrowly scoped submit/resubmit собствен
 
 Источники: `backend/app/api/routes/meetings.py`, `homeworks.py`, domain schemas/services.
 
+## Knowledge Base backend foundation
+
+| Method и route | Scope | Contract | Frontend boundary |
+|---|---|---|---|
+| `GET /api/v1/knowledge/documents` | active admin | filters + cursor/limit → summaries | Backend доступен, текущий Knowledge UI ещё читает IndexedDB |
+| `POST /api/v1/knowledge/documents` | active admin | `{kind,title,category?,html,position}` → `201` | Будущий typed client; server повторно очищает HTML |
+| `GET/PATCH /api/v1/knowledge/documents/{id}` | active admin | detail / partial update + `expected_version` | На `409` нужен refetch и явное разрешение конфликта |
+| `POST /api/v1/knowledge/documents/{id}/archive` | active admin | `{expected_version}` → document | Физического delete нет |
+| `POST /api/v1/knowledge/documents/{id}/restore` | active admin | `{expected_version}` → document | Archived list включается явно |
+| `POST /api/v1/knowledge/documents/{id}/favorite` | active admin | — → `204` | Личное избранное не меняет document version |
+| `POST /api/v1/knowledge/documents/{id}/unfavorite` | active admin | — → `204` | Идемпотентное удаление favorite |
+
+Student не имеет доступа к Knowledge routes. Mutations используют session cookie, CSRF и
+same-origin. Request body ограничен 1 MiB, HTML — 500 000 символов; server allowlist исключает
+scripts, embedded objects, images, inline styles, event attributes и unsafe URI schemes.
+KnowledgeData v1 import/migration, cutover и frontend API integration остаются отдельным этапом;
+существующая IndexedDB не читается и не изменяется этим backend foundation.
+
+Источники: `backend/app/api/routes/knowledge.py`, `backend/app/modules/knowledge/`.
+
 ## Legacy data, export и infrastructure
 
 | Method и route | Scope | Contract | Назначение |

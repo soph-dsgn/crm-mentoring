@@ -106,6 +106,25 @@ cursor. Групповой список учениц доступен тольк
 может отметить работу в процессе и отправить её; выдача, возврат и принятие доступны только
 назначенному admin или owner. Только принятие завершает связанные задачи.
 
+## Knowledge Base
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET/POST | `/api/v1/knowledge/documents` | cursor-список с фильтрами и поиском / создать общий материал |
+| GET/PATCH | `/api/v1/knowledge/documents/{id}` | прочитать / изменить по `expected_version` |
+| POST | `/api/v1/knowledge/documents/{id}/archive` | архивировать без физического удаления |
+| POST | `/api/v1/knowledge/documents/{id}/restore` | восстановить архивный материал |
+| POST | `/api/v1/knowledge/documents/{id}/favorite` | идемпотентно добавить в личное избранное |
+| POST | `/api/v1/knowledge/documents/{id}/unfavorite` | идемпотентно убрать из личного избранного |
+
+Knowledge Base доступна только active admin; student не получает ни список, ни отдельный документ.
+Общий документ и персональное избранное хранятся раздельно, поэтому favorite mutation не меняет
+`KnowledgeDocument.version`. HTML очищается строгим server allowlist, а `plain_text` и поисковое
+представление формируются сервером. Все mutations требуют cookie-session, CSRF и same-origin.
+Request body ограничен 1 MiB, содержимое одного документа — 500 000 символов. Устаревший
+`expected_version` возвращает `409 version_conflict`. File import, KnowledgeData migration,
+server cutover и frontend API integration в foundation-контракт не входят.
+
 ## Импорт, экспорт и файлы
 
 | Метод | Путь | Назначение |
