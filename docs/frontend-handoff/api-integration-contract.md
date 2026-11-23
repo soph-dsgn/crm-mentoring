@@ -116,8 +116,8 @@ Student может только narrowly scoped submit/resubmit собствен
 
 | Method и route | Scope | Contract | Frontend boundary |
 |---|---|---|---|
-| `GET /api/v1/knowledge/documents` | active admin | filters + cursor/limit → summaries | Backend доступен, текущий Knowledge UI ещё читает IndexedDB |
-| `POST /api/v1/knowledge/documents` | active admin | `{kind,title,category?,html,position}` → `201` | Будущий typed client; server повторно очищает HTML |
+| `GET /api/v1/knowledge/documents` | active admin | filters + cursor/limit → summaries | Typed client, server search, filters и pagination подключены |
+| `POST /api/v1/knowledge/documents` | active admin | `{kind,title,category?,html,position}` → `201` | Existing editor подключён; server повторно очищает HTML |
 | `GET/PATCH /api/v1/knowledge/documents/{id}` | active admin | detail / partial update + `expected_version` | На `409` нужен refetch и явное разрешение конфликта |
 | `POST /api/v1/knowledge/documents/{id}/archive` | active admin | `{expected_version}` → document | Физического delete нет |
 | `POST /api/v1/knowledge/documents/{id}/restore` | active admin | `{expected_version}` → document | Archived list включается явно |
@@ -142,7 +142,9 @@ DOCX/HTML/Markdown существующим frontend parser, плюс исход
 Checksum связывает source, mode, resolutions, actor и preview targets/versions; `409
 validation_changed` требует повторного validate. До initial activation document API отвечает `409
 knowledge_library_pending`. Browser records и IndexedDB должны оставаться нетронутыми до отдельной
-Milestone 8.3 UI/cutover процедуры; автоматический import на startup запрещён.
+Frontend использует server library state и явную UI/cutover процедуру; автоматический import на
+startup отсутствует. Исходный IndexedDB доступен только через отдельную локальную копию и ручной
+owner import.
 
 Источники: `backend/app/api/routes/knowledge.py`, `backend/app/modules/knowledge/`.
 

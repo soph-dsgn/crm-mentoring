@@ -293,3 +293,101 @@ export type LegacyImportResult = {
   mappings: Record<string, Record<string, string>>
   idempotent_replay: boolean
 }
+
+export type KnowledgeKind = 'prompt' | 'chapter'
+export type KnowledgeLibraryStatus = 'pending' | 'active'
+
+export type KnowledgeDocumentSummary = {
+  id: string
+  kind: KnowledgeKind
+  title: string
+  category: string | null
+  excerpt: string
+  position: number
+  archived_at: string | null
+  updated_at: string
+  version: number
+  is_favorite: boolean
+}
+
+export type KnowledgeDocumentRead = Omit<KnowledgeDocumentSummary, 'excerpt'> & {
+  html: string
+  plain_text: string
+  created_at: string
+}
+
+export type KnowledgeDocumentList = {
+  items: KnowledgeDocumentSummary[]
+  next_cursor: string | null
+}
+
+export type KnowledgeDocumentCreate = {
+  kind: KnowledgeKind
+  title: string
+  category?: string | null
+  html: string
+  position?: number
+}
+
+export type KnowledgeDocumentUpdate = Partial<Omit<KnowledgeDocumentCreate, 'kind'>> & {
+  expected_version: number
+}
+
+export type KnowledgeLibraryState = {
+  status: KnowledgeLibraryStatus
+  version: number
+  activated_at: string | null
+}
+
+export type KnowledgeImportMode = 'initial' | 'additional'
+export type KnowledgeSourceFormat = 'knowledge_data_v1' | 'parsed_documents'
+export type KnowledgeConflictAction = 'skip' | 'create_copy' | 'overwrite'
+
+export type KnowledgeConflictResolution = {
+  action: KnowledgeConflictAction
+  expected_version?: number
+}
+
+export type KnowledgeImportRequest = {
+  source: Record<string, unknown>
+  source_format: KnowledgeSourceFormat
+  mode: KnowledgeImportMode
+  resolutions?: Record<string, KnowledgeConflictResolution>
+  confirmation_checksum?: string
+  confirm?: boolean
+}
+
+export type KnowledgeImportItem = {
+  source_key: string
+  classification: 'new' | 'archived' | 'exact_duplicate' | 'conflict' | 'overwrite' | 'skipped'
+  target_id: string | null
+  conflict_code: string | null
+  resolved: boolean
+}
+
+export type KnowledgeImportIssue = {
+  code: string
+  source_key: string | null
+  fields: string[]
+}
+
+export type KnowledgeImportValidation = {
+  valid: boolean
+  checksum: string
+  source_version: number | null
+  source_format: KnowledgeSourceFormat
+  mode: KnowledgeImportMode
+  library_status: KnowledgeLibraryStatus
+  counts: Record<string, number>
+  items: KnowledgeImportItem[]
+  issues: KnowledgeImportIssue[]
+}
+
+export type KnowledgeImportResult = {
+  import_run_id: string
+  checksum: string
+  counts: Record<string, number>
+  mappings: Record<string, string>
+  library_status: KnowledgeLibraryStatus
+  idempotent_replay: boolean
+}

@@ -7,7 +7,7 @@
 | Перенос Student между groups | BLOCKED BY BACKEND | Скрыть local action; спроектировать отдельную атомарную команду |
 | Delete/archive StrategySection | BLOCKED BY BACKEND | Не вызывать локальное delete после cutover |
 | Перенос Task между sections | BLOCKED BY BACKEND | Разрешать reorder только внутри section |
-| Knowledge records/sync | BACKEND READY, FRONTEND LOCAL | Milestone 8.3 должен использовать server state/import API и сохранить IndexedDB backup |
+| Knowledge records/sync | IMPLEMENTED | Server state authoritative; IndexedDB остаётся отдельной неизменяемой локальной копией |
 | File uploads | MISSING | Хранить только поддерживаемые links/text; отдельный будущий scope |
 | Student product shell | MISSING frontend | Создать после auth и core domain integration |
 
@@ -24,10 +24,11 @@
 
 ## Knowledge Base
 
-Фактическое состояние: KnowledgeData v1 хранится в IndexedDB `crm-mentoring-knowledge`, documents
-store, key `content-v1`. Seed загружается отдельно; пользователь может импортировать DOCX/HTML/
-Markdown/JSON, редактировать/удалять документы, менять favorites и экспортировать JSON. Эти данные не
-входят в AppData v1-v3 и legacy backend import.
+Исходная KnowledgeData v1 по-прежнему хранится в IndexedDB `crm-mentoring-knowledge`, documents
+store, key `content-v1`, и не изменяется при server cutover. Рабочим источником после явной
+активации служит server library state. Владелец отдельно проверяет initial import и checksum;
+после активации действующие кураторы могут импортировать дополнительные DOCX/HTML/Markdown/JSON.
+Эти данные не входят в AppData v1-v3 и legacy backend import.
 
 ### Option A — временно browser-local
 
@@ -40,11 +41,10 @@ cross-device sync, общей истории или server backup. UI и док�
 Нужны отдельные models/API/RBAC, import mapping, sanitizer boundary, versioning и conflict strategy.
 Это отдельный backend+frontend проект; Knowledge нельзя помещать в Task/Strategy/Homework поля.
 
-### Рекомендация
+### Принятое решение
 
-Для первого server-integrated MVP оставить Knowledge browser-local с явной маркировкой и отдельным
-backup, не блокируя основной учебный workflow. До объявления продукта полноценно multi-user/cross-
-device необходимо принять Option B или осознанно исключить Knowledge из такого обещания.
+Реализована Option B: общая server-backed библиотека с личным избранным. Browser-local KnowledgeData
+сохраняется только как rollback/source backup и никогда не импортируется автоматически.
 
 ## Deployment boundary
 

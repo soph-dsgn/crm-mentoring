@@ -12,7 +12,7 @@
 | Server synchronization | MISSING | В `frontend/src` нет business API client |
 | Owner/user administration | MISSING | Нет экранов управления аккаунтами |
 | Student-specific experience | MISSING | Текущие экраны ориентированы на куратора |
-| Knowledge Base sync | BLOCKED BY BACKEND | Только IndexedDB, Knowledge API отсутствует |
+| Knowledge Base sync | IMPLEMENTED | Shared server API; IndexedDB сохранён как отдельная локальная копия |
 
 ## App state и persistence
 
@@ -48,7 +48,7 @@ server identity.
 - `AnyaPage` — отдельная очередь согласований той же `StrategyTask`
 - `HomeworkPage` — формирование, выдача и проверка ДЗ
 - meetings views — текущая встреча и история
-- prompts/textbook/knowledge — локальные материалы и пользовательские документы
+- prompts/textbook/knowledge — общие серверные материалы, личное избранное и явный импорт локальной копии
 - общие dialogs обеспечивают focus trap, возврат фокуса и pending states
 
 FlowBackground — один декоративный WebGL2 canvas с CSS fallback, reduced-motion, visibility/
@@ -80,7 +80,8 @@ layout/motion, форматирование и понятные подтверж
 - backend не предоставляет delete/archive для `StrategySection`
 - backend reorder задачи работает внутри section и не переносит её между sections
 - frontend-подпись owner не является серверной identity или permission
-- KnowledgeData не входит в AppData и legacy business import
+- KnowledgeData не входит в AppData и legacy business import; её отдельный импорт всегда требует
+  server validation, checksum и явное подтверждение владельца
 
 Эти случаи требуют продуктового решения или отдельного backend-контракта; frontend не должен
 обходить их цепочкой несогласованных запросов.

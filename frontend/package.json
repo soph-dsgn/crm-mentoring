@@ -15,7 +15,8 @@
     "verify:meetings-homeworks": "node scripts/verify-meetings-homeworks.mjs",
     "verify:student-workflow": "node scripts/verify-student-workflow.mjs",
     "verify:migration": "node scripts/verify-migration.mjs",
-    "verify:workflow": "node scripts/verify-workflow.mjs && node scripts/verify-auth.mjs && node scripts/verify-accounts.mjs && node scripts/verify-groups-students.mjs && node scripts/verify-strategies.mjs && node scripts/verify-meetings-homeworks.mjs && node scripts/verify-student-workflow.mjs && node scripts/verify-migration.mjs",
+    "verify:knowledge": "node scripts/verify-knowledge.mjs",
+    "verify:workflow": "node scripts/verify-workflow.mjs && node scripts/verify-auth.mjs && node scripts/verify-accounts.mjs && node scripts/verify-groups-students.mjs && node scripts/verify-strategies.mjs && node scripts/verify-meetings-homeworks.mjs && node scripts/verify-student-workflow.mjs && node scripts/verify-migration.mjs && node scripts/verify-knowledge.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
