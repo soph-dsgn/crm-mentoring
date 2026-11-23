@@ -55,6 +55,10 @@ async function readStored(): Promise<KnowledgeData | undefined> {
   })
 }
 
+export function readKnowledgeBackup(): Promise<KnowledgeData | undefined> {
+  return readStored()
+}
+
 async function writeStored(data: KnowledgeData): Promise<void> {
   const connection = await db()
   return new Promise((resolve, reject) => {

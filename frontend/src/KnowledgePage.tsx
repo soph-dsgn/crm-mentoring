@@ -1,146 +1,171 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftIcon as ArrowLeft, BookOpenIcon as BookOpen, CheckIcon as Check, CaretRightIcon as ChevronRight, CopyIcon as Copy, DownloadIcon as Download, FilePlusIcon as FilePlus2, PencilIcon as Pencil, PlusIcon as Plus, MagnifyingGlassIcon as Search, StarIcon as Star, TrashIcon as Trash2, UploadIcon as Upload, XIcon as X } from '@phosphor-icons/react'
-import Select from './Select'
-import { cleanHtml, copyKnowledge, downloadKnowledge, htmlToText, loadKnowledge, mergeKnowledge, parseKnowledgeFile, saveKnowledge } from './knowledge'
-import type { KnowledgeData, KnowledgeKind, KnowledgeRecord } from './knowledge'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArchiveIcon as Archive, ArrowClockwiseIcon as ArrowClockwise, ArrowLeftIcon as ArrowLeft, BookOpenIcon as BookOpen, CheckIcon as Check, CaretRightIcon as ChevronRight, CopyIcon as Copy, DownloadIcon as Download, FilePlusIcon as FilePlus2, PencilIcon as Pencil, PlusIcon as Plus, MagnifyingGlassIcon as Search, StarIcon as Star, UploadIcon as Upload, XIcon as X } from '@phosphor-icons/react'
+import type { KnowledgeDocumentRead, KnowledgeDocumentSummary, KnowledgeKind } from './api/contracts'
+import { knowledgeApi } from './api/knowledge'
+import { ApiError } from './api/http'
+import { useCurrentUser } from './auth/authContext'
+import { ConfirmDialog, Dialog } from './Dialogs'
+import { cleanHtml, copyKnowledge, downloadKnowledge, htmlToText, readKnowledgeBackup, type KnowledgeRecord } from './knowledge'
+import KnowledgeImportDialog from './knowledge/KnowledgeImportDialog'
+import { canManageInitialMigration, canUseKnowledge, knowledgeErrorMessage, summaryFromDocument } from './knowledge/knowledgeState'
 import { motionScrollBehavior } from './motion'
-import { ConfirmDialog, DeleteConfirmDialog, Dialog } from './Dialogs'
+import Select from './Select'
+
+type UiKind = 'prompts' | 'chapters'
+type LoadState = 'loading' | 'ready' | 'error'
+type EditorDraft = Pick<KnowledgeDocumentRead, 'id' | 'title' | 'category' | 'html' | 'position' | 'version'> & { isNew: boolean }
 
 const CATEGORIES = ['Все', 'Резюме', 'Сопроводительные письма', 'Кейсы', 'Портфолио', 'Собеседования', 'Другие']
-const empty = (kind: KnowledgeKind): KnowledgeRecord => ({
-  id: `custom-${crypto.randomUUID()}`, title: '', category: kind === 'prompts' ? 'Другие' : undefined,
-  html: '<p></p>', text: '', sourceId: 'user', sourceRevision: '', sourceHash: '', edited: true,
-  deleted: false, favorite: false, updatedAt: new Date().toISOString(),
-})
+const serverKind = (kind: UiKind): KnowledgeKind => kind === 'prompts' ? 'prompt' : 'chapter'
 
-export default function KnowledgePage({ kind }: { kind: KnowledgeKind }) {
-  const [data, setData] = useState<KnowledgeData | null>(null)
-  const dataRef = useRef<KnowledgeData | null>(null)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('Все')
-  const [favoritesOnly, setFavoritesOnly] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [editor, setEditor] = useState<KnowledgeRecord | null>(null)
-  const [confirmation,setConfirmation]=useState<{title:string;description:string;label:string;danger?:boolean;action:()=>void|Promise<void>}|null>(null)
-  const [copied, setCopied] = useState(false)
-  const [headings, setHeadings] = useState<{ id: string; text: string; level: number }[]>([])
-  const inputRef = useRef<HTMLInputElement>(null)
-  const editorRef = useRef<HTMLDivElement>(null)
-  const articleRef = useRef<HTMLDivElement>(null)
+function today() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+}
 
-  useEffect(() => {
-    let cancelled = false
-    loadKnowledge().then(value => { if (!cancelled) { dataRef.current = value; setData(value) } })
-      .catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : 'Не удалось открыть базу знаний') })
-    return () => { cancelled = true }
-  }, [])
+function downloadJson(value: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(value,null,2)],{type:'application/json'})
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href=url;link.download=filename;link.click();URL.revokeObjectURL(url)
+}
 
-  const records = useMemo(() => (data?.[kind] || []).filter(record => !record.deleted)
-    .sort((a, b) => kind === 'chapters' ? (a.order ?? 0) - (b.order ?? 0) : a.title.localeCompare(b.title, 'ru')), [data, kind])
-  const filtered = useMemo(() => records.filter(record => {
-    const match = !query.trim() || `${record.title} ${record.text}`.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru').trim())
-    return match && (kind === 'chapters' || category === 'Все' || record.category === category) && (!favoritesOnly || record.favorite)
-  }), [records, query, category, favoritesOnly, kind])
-  const selected = filtered.find(record => record.id === selectedId) || filtered[0] || null
+export default function KnowledgePage({ kind }: { kind: UiKind }) {
+  const currentUser = useCurrentUser()
+  const kindValue = serverKind(kind)
+  const [libraryState,setLibraryState]=useState<LoadState>('loading')
+  const [libraryStatus,setLibraryStatus]=useState<'pending'|'active'|null>(null)
+  const [items,setItems]=useState<KnowledgeDocumentSummary[]>([])
+  const [listState,setListState]=useState<LoadState>('loading')
+  const [listError,setListError]=useState('')
+  const [nextCursor,setNextCursor]=useState<string|null>(null)
+  const [loadingMore,setLoadingMore]=useState(false)
+  const [query,setQuery]=useState('')
+  const [debouncedQuery,setDebouncedQuery]=useState('')
+  const [category,setCategory]=useState('Все')
+  const [favoritesOnly,setFavoritesOnly]=useState(false)
+  const [showArchived,setShowArchived]=useState(false)
+  const [selectedId,setSelectedId]=useState<string|null>(null)
+  const [selected,setSelected]=useState<KnowledgeDocumentRead|null>(null)
+  const [detailState,setDetailState]=useState<LoadState>('ready')
+  const [detailError,setDetailError]=useState('')
+  const [editor,setEditor]=useState<EditorDraft|null>(null)
+  const [editorError,setEditorError]=useState('')
+  const [conflict,setConflict]=useState(false)
+  const [importOpen,setImportOpen]=useState(false)
+  const [confirmation,setConfirmation]=useState<{title:string;description:string;label:string;action:()=>Promise<void>}|null>(null)
+  const [notice,setNotice]=useState('')
+  const [pageError,setPageError]=useState('')
+  const [copied,setCopied]=useState(false)
+  const [headings,setHeadings]=useState<{id:string;text:string;level:number}[]>([])
+  const editorRef=useRef<HTMLDivElement>(null)
+  const articleRef=useRef<HTMLDivElement>(null)
+  const mutationPending=useRef(false)
 
-  useEffect(() => {
-    if (kind !== 'chapters' || !articleRef.current) { setHeadings([]); return }
-    const found = [...articleRef.current.querySelectorAll('h1, h2, h3')].map((node, index) => {
-      const id = `knowledge-heading-${index}`
-      node.id = id
-      return { id, text: node.textContent?.trim() || '', level: Number(node.tagName.slice(1)) }
-    }).filter(item => item.text)
-    setHeadings(found)
-  }, [selected?.id, selected?.html, kind])
+  const loadLibraryState=useCallback(async(signal?:AbortSignal)=>{
+    setLibraryState('loading');setPageError('')
+    try {const state=await knowledgeApi.libraryState(signal);setLibraryStatus(state.status);setLibraryState('ready')}
+    catch(caught){if(caught instanceof DOMException&&caught.name==='AbortError')return;setPageError(knowledgeErrorMessage(caught));setLibraryState('error')}
+  },[])
 
-  const commit = async (update: (old: KnowledgeData) => KnowledgeData) => {
-    const old = dataRef.current
-    if (!old) return
-    const next = update(old)
-    dataRef.current = next
-    setData(next)
-    try { await saveKnowledge(next); setError('') } catch { setError('Не удалось сохранить изменения. Экспортируйте данные и проверьте свободное место браузера') }
-  }
-  const patchRecord = (id: string, patch: Partial<KnowledgeRecord>) => commit(old => ({ ...old,
-    [kind]: old[kind].map(record => record.id === id ? { ...record, ...patch, updatedAt: new Date().toISOString() } : record),
-  }))
-  const saveEditor = async () => {
-    if (!editor?.title.trim()) { setError('Укажите название материала'); return }
-    const html = cleanHtml(editorRef.current?.innerHTML || editor.html)
-    if (!htmlToText(html)) { setError('Добавьте текст материала'); return }
-    const record = { ...editor, html, text: htmlToText(html), edited: true, updatedAt: new Date().toISOString() }
-    await commit(old => ({ ...old, [kind]: old[kind].some(item => item.id === record.id)
-      ? old[kind].map(item => item.id === record.id ? record : item)
-      : [...old[kind], { ...record, order: kind === 'chapters' ? old.chapters.length : undefined }],
-    }))
-    setSelectedId(record.id)
-    setEditor(null)
-    setNotice('Материал сохранён')
-  }
-  const remove = async (record: KnowledgeRecord) => {
-    setConfirmation({title:'Удалить материал?',description:`«${record.title}» исчезнет из библиотеки, но останется в резервной копии`,label:'Удалить материал',danger:true,action:async()=>{await patchRecord(record.id, { deleted: true, edited: true });setSelectedId(null);setNotice('Материал удалён')}})
-  }
-  const onImport = async (file?: File) => {
-    if (!file || !dataRef.current) return
-    setError('')
+  useEffect(()=>{const controller=new AbortController();void loadLibraryState(controller.signal);return()=>controller.abort()},[loadLibraryState])
+  useEffect(()=>{const timeout=setTimeout(()=>setDebouncedQuery(query.trim()),300);return()=>clearTimeout(timeout)},[query])
+
+  const loadList=useCallback(async({append=false,cursor,signal}:{append?:boolean;cursor?:string|null;signal?:AbortSignal}={})=>{
+    if(!append)setListState('loading');else setLoadingMore(true)
+    setListError('')
     try {
-      if (file.name.toLowerCase().endsWith('.json')) {
-        const backup = JSON.parse(await file.text()) as KnowledgeData
-        if (backup.version !== 1 || !Array.isArray(backup.prompts) || !Array.isArray(backup.chapters)) throw new Error('Файл не похож на резервную копию базы знаний')
-        const p = mergeKnowledge(dataRef.current.prompts, backup.prompts)
-        const c = mergeKnowledge(dataRef.current.chapters, backup.chapters)
-        setConfirmation({title:'Восстановить базу знаний?',description:`Новых: ${p.added + c.added}, обновлений: ${p.updated + c.updated}. Защищено пользовательских правок: ${p.protectedCount + c.protectedCount}`,label:'Восстановить данные',action:async()=>{await commit(old => ({ ...old, prompts: p.records, chapters: c.records }));setNotice(`Добавлено ${p.added + c.added}, обновлено ${p.updated + c.updated}, сохранено без изменений ${p.protectedCount + c.protectedCount}`)}})
-      } else {
-        const parsed = await parseKnowledgeFile(file, kind)
-        const result = mergeKnowledge(dataRef.current[kind], parsed)
-        setConfirmation({title:'Импортировать материалы?',description:`Файл «${file.name}»: ${parsed.length} записей, новых ${result.added}, обновлений ${result.updated}, защищено правок ${result.protectedCount}`,label:'Импортировать',action:async()=>{await commit(old => ({ ...old, [kind]: result.records }));setNotice(`Добавлено ${result.added}, обновлено ${result.updated}, без дубликатов ${result.unchanged}; правки защищены: ${result.protectedCount}`)}})
-      }
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Импорт не удался') }
+      const page=await knowledgeApi.list({kind:kindValue,category:kind==='prompts'&&category!=='Все'?category:undefined,q:debouncedQuery||undefined,favorite:favoritesOnly?true:undefined,includeArchived:showArchived,cursor:cursor??undefined,limit:50},signal)
+      setItems(current=>append?[...new Map([...current,...page.items].map(item=>[item.id,item])).values()]:page.items)
+      setNextCursor(page.next_cursor);setListState('ready')
+      if(!append)setSelectedId(current=>page.items.some(item=>item.id===current)?current:page.items[0]?.id??null)
+    } catch(caught) {
+      if(caught instanceof DOMException&&caught.name==='AbortError')return
+      setListError(knowledgeErrorMessage(caught));setListState('error')
+    } finally {setLoadingMore(false)}
+  },[category,debouncedQuery,favoritesOnly,kind,kindValue,showArchived])
+
+  useEffect(()=>{
+    if(libraryStatus!=='active')return
+    const controller=new AbortController();void loadList({signal:controller.signal});return()=>controller.abort()
+  },[libraryStatus,loadList])
+
+  const loadDetail=useCallback(async(id:string,signal?:AbortSignal)=>{
+    setDetailState('loading');setDetailError('')
+    try {const document=await knowledgeApi.get(id,signal);setSelected(document);setDetailState('ready');return document}
+    catch(caught){if(caught instanceof DOMException&&caught.name==='AbortError')return;setDetailError(knowledgeErrorMessage(caught));setDetailState('error');return undefined}
+  },[])
+
+  useEffect(()=>{
+    if(!selectedId){setSelected(null);setDetailState('ready');return}
+    const controller=new AbortController();void loadDetail(selectedId,controller.signal);return()=>controller.abort()
+  },[loadDetail,selectedId])
+  useEffect(()=>{
+    if(libraryStatus!=='active')return
+    const refresh=()=>{void loadList();if(selectedId)void loadDetail(selectedId)}
+    window.addEventListener('focus',refresh);return()=>window.removeEventListener('focus',refresh)
+  },[libraryStatus,loadDetail,loadList,selectedId])
+
+  useEffect(()=>{
+    if(kind!=='chapters'||!articleRef.current){setHeadings([]);return}
+    const found=[...articleRef.current.querySelectorAll('h1,h2,h3')].map((node,index)=>{const id=`knowledge-heading-${index}`;node.id=id;return{id,text:node.textContent?.trim()||'',level:Number(node.tagName.slice(1))}}).filter(item=>item.text)
+    setHeadings(found)
+  },[kind,selected?.html,selected?.id])
+
+  const reconcileDocument=(document:KnowledgeDocumentRead)=>{
+    setSelected(document);setSelectedId(document.id)
+    setItems(current=>{const summary=summaryFromDocument(document);return current.some(item=>item.id===document.id)?current.map(item=>item.id===document.id?summary:item):[summary,...current]})
   }
-  const copy = async (record: KnowledgeRecord) => {
-    try { await copyKnowledge(record); setCopied(true); setTimeout(() => setCopied(false), 1800) }
-    catch { setError('Копирование не удалось. Проверьте разрешение браузера на буфер обмена') }
+  const runMutation=async(action:()=>Promise<KnowledgeDocumentRead>)=>{
+    if(mutationPending.current)return undefined
+    mutationPending.current=true;setPageError('')
+    try {const document=await action();reconcileDocument(document);return document}
+    catch(caught){
+      setPageError(knowledgeErrorMessage(caught))
+      if(caught instanceof ApiError&&caught.status===409){setConflict(true);if(selectedId)void loadDetail(selectedId)}
+      if(caught instanceof ApiError&&[403,404].includes(caught.status))void loadList()
+      throw caught
+    } finally {mutationPending.current=false}
   }
+
+  const openNew=()=>{setEditorError('');setConflict(false);setEditor({id:'',title:'',category:kind==='prompts'?'Другие':null,html:'<p></p>',position:items.length,version:1,isNew:true})}
+  const openEdit=()=>{if(!selected)return;setEditorError('');setConflict(false);setEditor({id:selected.id,title:selected.title,category:selected.category,html:selected.html,position:selected.position,version:selected.version,isNew:false})}
+  const saveEditor=async()=>{
+    if(!editor||mutationPending.current)return
+    const title=editor.title.trim();const html=cleanHtml(editorRef.current?.innerHTML||editor.html)
+    if(!title){setEditorError('Укажите название материала');return}
+    if(!htmlToText(html)){setEditorError('Добавьте текст материала');return}
+    setEditorError('')
+    try {
+      const saved=await runMutation(()=>editor.isNew
+        ?knowledgeApi.create({kind:kindValue,title,category:kind==='prompts'?editor.category:null,html,position:editor.position})
+        :knowledgeApi.update(editor.id,{expected_version:editor.version,title,category:kind==='prompts'?editor.category:null,html,position:editor.position}))
+      if(saved){setEditor(null);setNotice('Материал сохранён');void loadList()}
+    } catch(caught) {setEditorError(knowledgeErrorMessage(caught))}
+  }
+  const reloadEditor=async()=>{if(!editor||editor.isNew)return;const current=await loadDetail(editor.id);if(current){setEditor({id:current.id,title:current.title,category:current.category,html:current.html,position:current.position,version:current.version,isNew:false});setConflict(false);setEditorError('')}}
+
+  const toggleFavorite=async()=>{if(!selected||mutationPending.current)return;const next=!selected.is_favorite;mutationPending.current=true;setPageError('');try{await knowledgeApi.setFavorite(selected.id,next);reconcileDocument({...selected,is_favorite:next})}catch(caught){setPageError(knowledgeErrorMessage(caught))}finally{mutationPending.current=false}}
+  const requestArchive=()=>{if(!selected)return;const archived=Boolean(selected.archived_at);setConfirmation({title:archived?'Восстановить материал?':'Переместить материал в архив?',description:archived?`«${selected.title}» снова появится в рабочем списке`:`«${selected.title}» останется на сервере и будет доступен в архиве`,label:archived?'Восстановить':'В архив',action:async()=>{await runMutation(()=>archived?knowledgeApi.restore(selected.id,selected.version):knowledgeApi.archive(selected.id,selected.version));setNotice(archived?'Материал восстановлен':'Материал перемещён в архив');await loadList()}})}
+  const copy=async()=>{if(!selected)return;const record:KnowledgeRecord={id:selected.id,title:selected.title,category:selected.category??undefined,html:selected.html,text:selected.plain_text,sourceId:'server',sourceRevision:String(selected.version),sourceHash:'',edited:true,deleted:Boolean(selected.archived_at),favorite:selected.is_favorite,updatedAt:selected.updated_at,order:selected.position};try{await copyKnowledge(record);setCopied(true);setTimeout(()=>setCopied(false),1800)}catch{setPageError('Не удалось скопировать. Проверьте доступ браузера к буферу обмена')}}
+  const exportLocal=async()=>{try{const local=await readKnowledgeBackup();if(!local){setPageError('На этом устройстве нет локальной копии KnowledgeData v1');return}downloadKnowledge(local)}catch{setPageError('Не удалось прочитать локальную копию. Она не изменена')}}
+  const exportServer=async()=>{try{downloadJson(await knowledgeApi.exportLibrary(),`kuratorskaya-knowledge-server-${today()}.json`)}catch(caught){setPageError(knowledgeErrorMessage(caught))}}
+  const importComplete=async()=>{setImportOpen(false);setLibraryStatus('active');await loadList();setNotice('Серверная база знаний обновлена')}
+
+  if(!canUseKnowledge(currentUser))return <div className="knowledge-state" role="alert"><BookOpen size={30}/><h2>Нет доступа к базе знаний</h2><p>Раздел доступен только активным кураторам и владельцу</p></div>
+  if(libraryState==='loading')return <div className="knowledge-loading" role="status"><span className="account-spinner"/>Проверяем состояние базы знаний…</div>
+  if(libraryState==='error')return <div className="knowledge-state error" role="alert"><h2>Не удалось открыть базу знаний</h2><p>{pageError}</p><button className="btn secondary" onClick={()=>void loadLibraryState()}>Повторить</button></div>
+  if(libraryStatus==='pending')return <div className="knowledge-page"><div className="knowledge-state pending"><BookOpen size={32}/><h1>База знаний готова к переносу</h1><p>{canManageInitialMigration(currentUser)?'Выберите сохранённую KnowledgeData v1, проверьте результат и отдельно подтвердите активацию. Ничего не переносится автоматически':'Первую серверную базу знаний должен проверить и активировать владелец «Кураторской»'}</p>{canManageInitialMigration(currentUser)&&<button className="btn primary" onClick={()=>setImportOpen(true)}><Upload size={17}/> Проверить локальную копию</button>}<button className="btn secondary" onClick={()=>void loadLibraryState()}><ArrowClockwise size={17}/> Обновить состояние</button></div><KnowledgeImportDialog open={importOpen} initial kind={kindValue} onClose={()=>setImportOpen(false)} onComplete={importComplete}/></div>
 
   return <div className="knowledge-page">
-    <header className="knowledge-head">
-      <div><h1>{kind === 'prompts' ? 'Промпты' : 'Учебник'}</h1><p>{kind === 'prompts' ? `${records.length} записей · исходный документ «МЕНТОРИНГ»` : `${records.length} разделов · исходный документ «Погружение в IT»`}</p></div>
-      <div className="knowledge-head-actions">
-        <button className="btn secondary" onClick={() => inputRef.current?.click()}><Upload size={16} weight="regular"/> Импорт</button>
-        <button className="btn secondary" onClick={() => data && downloadKnowledge(data)} disabled={!data}><Download size={16} weight="regular"/> Экспорт</button>
-        <button className="btn primary" onClick={() => setEditor(empty(kind))}><Plus size={16} weight="regular"/> {kind === 'prompts' ? 'Промпт' : 'Раздел'}</button>
-        <input ref={inputRef} hidden type="file" accept=".docx,.html,.htm,.md,.markdown,.json" onChange={event => { void onImport(event.target.files?.[0]); event.target.value = '' }}/>
-      </div>
-    </header>
-    {error && <div className="knowledge-alert error" role="alert">{error}</div>}
-    {notice && <div className="knowledge-alert">{notice}<button onClick={() => setNotice('')} aria-label="Закрыть"><X size={14} weight="regular"/></button></div>}
-    {!data ? <div className="knowledge-loading">Загружаем материалы…</div> : <div className="knowledge-layout">
-      <aside className="knowledge-index">
-        <label className="knowledge-search"><Search size={17} weight="regular"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Поиск по содержимому"/></label>
-        {kind === 'prompts' && <><div className="knowledge-categories">{CATEGORIES.map(item => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><button className={`knowledge-favorites ${favoritesOnly ? 'active' : ''}`} onClick={() => setFavoritesOnly(!favoritesOnly)}><Star size={15} fill={favoritesOnly ? 'currentColor' : 'none'}/> Избранное</button></>}
-        <div className="knowledge-index-count">{filtered.length} {kind === 'prompts' ? 'записей' : 'разделов'}</div>
-        <div className="knowledge-index-list">
-          {filtered.map(record => <button key={record.id} className={`knowledge-index-item ${selected?.id === record.id ? 'active' : ''}`} onClick={() => setSelectedId(record.id)}><span><strong>{record.title}</strong>{kind === 'prompts' && <small>{record.category}</small>}</span><ChevronRight size={16}/></button>)}
-          {!filtered.length && <div className="knowledge-no-results">Ничего не найдено. Попробуйте другой запрос</div>}
-        </div>
-      </aside>
-      <section className="knowledge-reader">
-        {selected ? <>
-          <div className="knowledge-reader-head"><div><span>{kind === 'prompts' ? selected.category : 'Раздел учебника'}</span><h2>{selected.title}</h2></div><div className="knowledge-reader-actions">
-            {kind === 'prompts' && <button className="knowledge-favorite-button" aria-label={selected.favorite ? 'Убрать из избранного' : 'В избранное'} aria-pressed={selected.favorite} title="Избранное" onClick={() => patchRecord(selected.id, { favorite: !selected.favorite })}><Star size={18} weight={selected.favorite?'fill':'regular'}/></button>}
-            <button title="Редактировать" aria-label="Редактировать" onClick={() => setEditor({ ...selected })}><Pencil size={17} weight="regular"/></button>
-            <button title="Удалить" aria-label="Удалить" onClick={() => remove(selected)}><Trash2 size={17}/></button>
-          </div></div>
-          <div className="knowledge-source">{selected.sourceId === 'user' ? 'Мой материал' : selected.sourceId.startsWith('file:') ? `Импорт: ${selected.sourceId.slice(5)}` : 'Исходный документ Google Docs'}{selected.edited && ' · изменён'}</div>
-          {kind === 'chapters' && headings.length > 1 && <nav className="knowledge-toc" aria-label="В этом разделе"><strong>В этом разделе</strong><div>{headings.slice(1).map(heading => <button key={heading.id} className={heading.level === 3 ? 'nested' : ''} onClick={() => document.getElementById(heading.id)?.scrollIntoView({ behavior: motionScrollBehavior(window.matchMedia('(prefers-reduced-motion: reduce)').matches), block: 'start' })}>{heading.text}</button>)}</div></nav>}
-          <article key={selected.id} ref={articleRef} className="knowledge-article" dangerouslySetInnerHTML={{ __html: cleanHtml(selected.html) }}/>
-          <div className="knowledge-reader-foot"><button className="btn primary" onClick={() => copy(selected)}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? 'Скопировано' : kind === 'prompts' ? 'Скопировать промпт' : 'Скопировать раздел'}</button></div>
-        </> : <div className="knowledge-empty"><BookOpen size={28}/><h2>Пока здесь пусто</h2><p>Добавьте материал или импортируйте DOCX, HTML или Markdown</p><button className="btn primary" onClick={() => inputRef.current?.click()}><FilePlus2 size={16}/> Импортировать</button></div>}
-      </section>
-    </div>}
-    <Dialog open={Boolean(editor)} title={editor&&data?.[kind].some(item => item.id === editor.id) ? 'Редактировать' : 'Новый материал'} onClose={()=>setEditor(null)} wide>{editor&&<div className="knowledge-editor-form"><label className="field"><span>Название</span><input value={editor.title} onChange={event => setEditor({ ...editor, title: event.target.value })} autoFocus/></label>{kind === 'prompts' && <div className="field"><span>Категория</span><Select aria-label="Категория" value={editor.category} onChange={event => setEditor({ ...editor, category: event.target.value })}>{CATEGORIES.slice(1).map(item => <option key={item}>{item}</option>)}</Select></div>}<label className="field"><span>Содержание</span><div ref={editorRef} className="knowledge-rich-editor" contentEditable suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: cleanHtml(editor.html) }}/></label><p className="knowledge-editor-help">Можно редактировать текст прямо здесь, вставлять списки, таблицы и ссылки. Исходная версия защищена резервным экспортом</p><div className="dialog-actions"><button className="btn secondary" onClick={() => setEditor(null)}><ArrowLeft size={15} weight="regular"/> Отмена</button><button className="btn primary" onClick={saveEditor}>Сохранить</button></div></div>}</Dialog>
-    {confirmation?.danger?<DeleteConfirmDialog open title={confirmation.title} description={confirmation.description} confirmLabel={confirmation.label} onConfirm={confirmation.action} onClose={()=>setConfirmation(null)}/>:<ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title||''} description={confirmation?.description||''} confirmLabel={confirmation?.label} onConfirm={confirmation?.action||(()=>{})} onClose={()=>setConfirmation(null)}/>}
+    <header className="knowledge-head"><div><h1>{kind==='prompts'?'Промпты':'Учебник'}</h1><p>Общая серверная база · изменения доступны на всех устройствах</p></div><div className="knowledge-head-actions"><button className="btn secondary" onClick={()=>setImportOpen(true)}><Upload size={16}/> Импорт</button><button className="btn secondary" onClick={()=>void exportLocal()}><Download size={16}/> Локальная копия</button>{currentUser.is_owner&&<button className="btn secondary" onClick={()=>void exportServer()}><Download size={16}/> Серверная копия</button>}<button className="btn primary" onClick={openNew}><Plus size={16}/> {kind==='prompts'?'Промпт':'Раздел'}</button></div></header>
+    {pageError&&<div className="knowledge-alert error" role="alert">{pageError}<button onClick={()=>setPageError('')} aria-label="Закрыть"><X size={14}/></button></div>}
+    {notice&&<div className="knowledge-alert" role="status">{notice}<button onClick={()=>setNotice('')} aria-label="Закрыть"><X size={14}/></button></div>}
+    <div className="knowledge-layout"><aside className="knowledge-index"><label className="knowledge-search"><Search size={17}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Поиск по содержимому" aria-label="Поиск по базе знаний"/></label>{kind==='prompts'&&<><div className="knowledge-categories">{CATEGORIES.map(item=><button key={item} className={category===item?'active':''} aria-pressed={category===item} onClick={()=>setCategory(item)}>{item}</button>)}</div><button className={`knowledge-favorites ${favoritesOnly?'active':''}`} aria-pressed={favoritesOnly} onClick={()=>setFavoritesOnly(value=>!value)}><Star size={15} weight={favoritesOnly?'fill':'regular'}/> Избранное</button></>}<button className={`knowledge-favorites ${showArchived?'active':''}`} aria-pressed={showArchived} onClick={()=>setShowArchived(value=>!value)}><Archive size={15}/> {showArchived?'Скрыть архив':'Показать архив'}</button><div className="knowledge-index-count">{items.length} {kind==='prompts'?'записей':'разделов'}</div><div className="knowledge-index-list">{listState==='loading'&&items.length===0&&<div className="knowledge-inline-state" role="status"><span className="account-spinner"/>Загружаем…</div>}{items.map(record=><button key={record.id} className={`knowledge-index-item ${selectedId===record.id?'active':''} ${record.archived_at?'archived':''}`} onClick={()=>setSelectedId(record.id)}><span><strong>{record.title}</strong><small>{record.archived_at?'В архиве':kind==='prompts'?record.category:'Раздел учебника'}</small></span><ChevronRight size={16}/></button>)}{listState==='ready'&&items.length===0&&<div className="knowledge-no-results">Ничего не найдено. Попробуйте другой запрос</div>}{listState==='error'&&<div className="knowledge-inline-error" role="alert"><p>{listError}</p><button className="btn small" onClick={()=>void loadList()}>Повторить</button></div>}{nextCursor&&<button className="btn secondary knowledge-more" disabled={loadingMore} onClick={()=>void loadList({append:true,cursor:nextCursor})}>{loadingMore?'Загружаем…':'Показать ещё'}</button>}</div></aside>
+      <section className="knowledge-reader">{detailState==='loading'&&selected?.id!==selectedId&&<div className="knowledge-empty" role="status"><span className="account-spinner"/>Загружаем материал…</div>}{detailState==='error'&&<div className="knowledge-empty error" role="alert"><h2>Не удалось загрузить материал</h2><p>{detailError}</p>{selectedId&&<button className="btn secondary" onClick={()=>void loadDetail(selectedId)}>Повторить</button>}</div>}{selected?.id===selectedId&&<><div className="knowledge-reader-head"><div><span>{selected.archived_at?'В архиве':kind==='prompts'?selected.category:'Раздел учебника'}</span><h2>{selected.title}</h2></div><div className="knowledge-reader-actions">{kind==='prompts'&&<button aria-label={selected.is_favorite?'Убрать из избранного':'В избранное'} aria-pressed={selected.is_favorite} title="Избранное" onClick={()=>void toggleFavorite()}><Star size={18} weight={selected.is_favorite?'fill':'regular'}/></button>}<button title="Редактировать" aria-label="Редактировать" onClick={openEdit}><Pencil size={17}/></button><button title={selected.archived_at?'Восстановить':'В архив'} aria-label={selected.archived_at?'Восстановить':'В архив'} onClick={requestArchive}><Archive size={17}/></button></div></div><div className="knowledge-source">Серверный материал · версия {selected.version}</div>{kind==='chapters'&&headings.length>1&&<nav className="knowledge-toc" aria-label="В этом разделе"><strong>В этом разделе</strong><div>{headings.slice(1).map(heading=><button key={heading.id} className={heading.level===3?'nested':''} onClick={()=>document.getElementById(heading.id)?.scrollIntoView({behavior:motionScrollBehavior(window.matchMedia('(prefers-reduced-motion: reduce)').matches),block:'start'})}>{heading.text}</button>)}</div></nav>}<article key={`${selected.id}-${selected.version}`} ref={articleRef} className="knowledge-article" dangerouslySetInnerHTML={{__html:cleanHtml(selected.html)}}/><div className="knowledge-reader-foot"><button className="btn primary" onClick={()=>void copy()}>{copied?<Check size={16}/>:<Copy size={16}/>} {copied?'Скопировано':kind==='prompts'?'Скопировать промпт':'Скопировать раздел'}</button></div></>}{!selectedId&&detailState==='ready'&&<div className="knowledge-empty"><BookOpen size={28}/><h2>Пока здесь пусто</h2><p>Добавьте материал или импортируйте DOCX, HTML, Markdown или KnowledgeData v1</p><button className="btn primary" onClick={()=>setImportOpen(true)}><FilePlus2 size={16}/> Импортировать</button></div>}</section>
+    </div>
+    <Dialog open={Boolean(editor)} title={editor?.isNew?'Новый материал':'Редактировать'} onClose={()=>{if(!mutationPending.current)setEditor(null)}} wide dismissible={!mutationPending.current}>{editor&&<div className="knowledge-editor-form"><label className="field"><span>Название</span><input value={editor.title} onChange={event=>setEditor({...editor,title:event.target.value})} autoFocus/></label>{kind==='prompts'&&<div className="field"><span>Категория</span><Select aria-label="Категория" value={editor.category??'Другие'} onChange={event=>setEditor({...editor,category:event.target.value})}>{CATEGORIES.slice(1).map(item=><option key={item}>{item}</option>)}</Select></div>}<label className="field"><span>Содержание</span><div ref={editorRef} className="knowledge-rich-editor" contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning dangerouslySetInnerHTML={{__html:cleanHtml(editor.html)}}/></label><p className="knowledge-editor-help">Сервер очистит HTML и безопасные ссылки перед сохранением</p>{editorError&&<p className="dialog-error" role="alert">{editorError}</p>}{conflict&&<div className="knowledge-conflict" role="alert"><p>Черновик сохранён только в этом окне. Можно закрыть его или явно загрузить актуальную серверную версию</p><button className="btn secondary" onClick={()=>void reloadEditor()}>Загрузить серверную версию</button></div>}<div className="dialog-actions"><button className="btn secondary" disabled={mutationPending.current} onClick={()=>setEditor(null)}><ArrowLeft size={15}/> Отмена</button><button className="btn primary" disabled={mutationPending.current} onClick={()=>void saveEditor()}>{mutationPending.current?'Сохраняем…':'Сохранить'}</button></div></div>}</Dialog>
+    <KnowledgeImportDialog open={importOpen} initial={false} kind={kindValue} onClose={()=>setImportOpen(false)} onComplete={importComplete}/>
+    <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title??''} description={confirmation?.description??''} confirmLabel={confirmation?.label} danger={confirmation?.label==='В архив'} getErrorMessage={knowledgeErrorMessage} onConfirm={confirmation?.action??(()=>{})} onClose={()=>setConfirmation(null)}/>
   </div>
 }
