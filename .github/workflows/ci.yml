@@ -69,7 +69,7 @@ jobs:
       KURATORSKAYA_ENVIRONMENT: test
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18.4-alpine
         env:
           POSTGRES_DB: kuratorskaya_test
           POSTGRES_USER: kuratorskaya

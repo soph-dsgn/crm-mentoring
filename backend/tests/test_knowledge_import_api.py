@@ -616,3 +616,24 @@ def assert_concurrent_additional_imports_serialize_same_source(knowledge_api) ->
         assert database.scalar(select(func.count(KnowledgeDocument.id))) == 1
         assert database.scalar(select(func.count(KnowledgeImportRun.id))) == 1
         assert database.scalar(select(func.count(KnowledgeImportMapping.id))) == 1
+
+
+def test_source_alias_keeps_existing_knowledge_import_mapping(knowledge_api) -> None:
+    client, _, _, headers = make_owner(knowledge_api)
+    alias = "legacy:curator-prompts"
+    source = knowledge_data()
+    source["prompts"][0]["sourceId"] = import_service.KNOWN_LEGACY_SOURCE_IDS[alias]
+    initial = {"source": source, "source_format": "knowledge_data_v1", "mode": "initial"}
+    preview = validate(client, headers, initial)
+    assert (
+        client.post(
+            "/api/v1/knowledge/imports", json=confirmed(initial, preview), headers=headers
+        ).status_code
+        == 201
+    )
+
+    source["prompts"][0]["sourceId"] = alias
+    later = validate(client, headers, {**initial, "mode": "additional"})
+    assert later["valid"]
+    assert later["counts"]["exact_duplicates"] == 1
+    assert later["items"][0]["source_key"] == preview["items"][0]["source_key"]

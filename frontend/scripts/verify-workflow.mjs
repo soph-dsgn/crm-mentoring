@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { load } from 'cheerio'
 
 const server = await createServer({ server: { middlewareMode: true }, optimizeDeps: { noDiscovery: true }, appType: 'custom', logLevel: 'error' })
@@ -21,7 +21,11 @@ try {
   const { safeExternalUrl } = await server.ssrLoadModule('/src/safeExternalUrl.ts')
   const { normalizeData, applyApprovalStatus, applyHomeworkPatch, archiveTask, recallApproval, studentTasks, needsAnyaApproval, nearestTask, planProgress, curriculumProgress, taskColumn, homeworkText, addCalendarMonths } = dataModule
   const { mergeStrategies } = await server.ssrLoadModule('/src/strategyImport.ts')
-  const seed = JSON.parse(await readFile(new URL('../public/strategies/strategy-seed.json', import.meta.url), 'utf8'))
+  const staticRoot = new URL('../public/', import.meta.url)
+  const staticFiles = (await readdir(staticRoot, { recursive: true, withFileTypes: true }))
+    .filter(entry => entry.isFile()).map(entry => entry.name).sort()
+  assert.deepEqual(staticFiles, ['brand-star.svg', 'demo-portraits.png'])
+  const seed = JSON.parse(await readFile(new URL('../../migration-sources/strategies/strategy-seed.json', import.meta.url), 'utf8'))
   const seeded = mergeStrategies(dataModule.emptyData(), seed)
   assert.equal(seeded.groups.length, 4)
   assert.equal(seeded.students.length, 19)
@@ -149,13 +153,19 @@ try {
   assert.match(homeworkText('Настя, твоё ДЗ:', [{ taskId: '1', title: 'Резюме', description: 'Собрать опыт', url: 'https://example.com/template', materials: [], dueAt: '' }], ''), /1\. Резюме — Собрать опыт\nhttps:\/\/example.com\/template/)
   const noop = () => {}
   const anyaMarkup = renderToStaticMarkup(React.createElement(AnyaPage, { data: { ...approvalData, tasks: [approvalTask], students: [{ id: 'student', groupId: 'group', name: 'Настя' }], groups: [{ id: 'group', name: 'Группа 1' }] }, onStudent: noop, onTask: noop, onApproval: noop, onRecall: noop, onComment: noop, onType: noop, onMaterial: noop }))
-  assert.ok(anyaMarkup.includes('Проверка резюме'))
   assert.ok(anyaMarkup.includes('Настя'))
   assert.ok(anyaMarkup.includes('Группа 1'))
-  assert.ok(anyaMarkup.includes('Передать Ане на проверку'))
-  assert.ok(anyaMarkup.includes('Материал, тип и заметки'))
-  assert.ok(anyaMarkup.includes('Отозвать из очереди'))
-  const detailMarkup = renderToStaticMarkup(React.createElement(TaskDetail, { task: submitted.tasks[0], studentName: 'Настя', groupName: 'Группа 1', sectionTitle: 'Часть 1', homeworkTitle: 'ДЗ', onHomework: noop, onStatus: noop, onPrepareApproval: noop, onEdit: noop }))
+  assert.ok(anyaMarkup.includes('Передать Ане'))
+  const sentTask = { ...approvalTask, approvalStatus: 'sent', approvalComment: 'Проверь структуру' }
+  const anyaData = { ...approvalData, tasks: [sentTask], students: [{ id: 'student', groupId: 'group', name: 'Настя' }], groups: [{ id: 'group', name: 'Группа 1' }] }
+  const reviewerMarkup = renderToStaticMarkup(React.createElement(AnyaPage, { data: anyaData, reviewer: true, onStudent: noop, onTask: noop, onApproval: noop }))
+  assert.ok(reviewerMarkup.includes('Согласовать'))
+  assert.ok(reviewerMarkup.includes('Вернуть на доработку'))
+  assert.ok(reviewerMarkup.includes('Проверь структуру'))
+  const curatorMarkup = renderToStaticMarkup(React.createElement(AnyaPage, { data: anyaData, onStudent: noop, onTask: noop, onApproval: noop }))
+  assert.ok(!curatorMarkup.includes('Согласовать'))
+  assert.ok(curatorMarkup.includes('Отозвать'))
+  const detailMarkup = renderToStaticMarkup(React.createElement(TaskDetail, { task: submitted.tasks[0], studentName: 'Настя', groupName: 'Группа 1', sectionTitle: 'Часть 1', homeworkTitle: 'ДЗ', onHomework: noop, onStatus: noop, onHandoff: noop, onEdit: noop }))
   assert.ok(detailMarkup.includes('Группа 1 · Настя'))
   assert.ok(detailMarkup.includes('Раздел стратегии: Часть 1'))
   assert.ok(detailMarkup.includes('Статус выполнения изменится после проверки'))
@@ -213,7 +223,7 @@ try {
   assert.ok(profileMarkup.includes('Задачи к встрече'))
   assert.ok(profileMarkup.includes('task-card'))
   const profileDom=load(profileMarkup)
-  assert.equal(profileDom('button[role="tab"]').filter((_,element)=>profileDom(element).text().startsWith('Встреча')).length,1)
+  assert.equal(profileDom('button[role="tab"]').filter((_,element)=>profileDom(element).text().startsWith('Встречи')).length,1)
   assert.ok(profileMarkup.indexOf('Задачи к встрече')<profileMarkup.indexOf('История встреч'))
   assert.ok(profileDom('.meeting-tasks .task-card [role="combobox"]').length>0)
   assert.ok(profileDom('.meeting-list .meeting-date').text().length>0)
@@ -263,6 +273,13 @@ try {
   const visionCss = await readFile(new URL('../src/vision-ui.css', import.meta.url),'utf8')
   assert.match(visionCss,/--ui-bg:\s*#f4f5fa/)
   assert.match(visionCss,/\.app-shell\s*\{[^}]*background:\s*var\(--ui-bg\)/s)
+  const dateField = await server.ssrLoadModule('/src/dateInput.ts')
+  assert.equal(dateField.maskDateInput('2601202'), '26.01.202')
+  assert.equal(dateField.maskDateInput('26.01.20256'), '26.01.2025')
+  assert.equal(dateField.displayToIso('26.01.2026'), '2026-01-26')
+  assert.equal(dateField.displayToIso('31.02.2026'), null)
+  assert.equal(dateField.displayToIso('26.01.202'), null)
+  assert.equal(dateField.isoToDisplay('2027-04-30T00:00:00Z'), '30.04.2027')
   console.log('Workflow verification passed: migration, plan progress, homework review, Anya approval cycle, immutable homework, Telegram text, UI render.')
 } finally {
   await server.close()

@@ -20,6 +20,7 @@ from app.modules.auth.dependencies import request_now
 from app.modules.auth.passwords import LoginFormatError, PasswordManager
 from app.modules.users.schemas import (
     CuratorPublicResponse,
+    DisplayNameUpdate,
     GroupAssignmentResponse,
     LoginAccountRequest,
     OffboardCuratorRequest,
@@ -41,6 +42,8 @@ from app.modules.users.service import (
     get_student_account,
     list_curators,
     offboard_curator,
+    reactivate_student_account,
+    rename_user,
     reset_password,
     transfer_owner,
 )
@@ -62,7 +65,9 @@ def create_curator_endpoint(
 ) -> TemporaryCredentialResponse:
     manager: PasswordManager = request.app.state.password_manager
     try:
-        user, temporary_password = create_curator(database, manager, context.user, payload.login)
+        user, temporary_password = create_curator(
+            database, manager, context.user, payload.login, payload.display_name
+        )
         _commit(database)
     except LoginFormatError as error:
         database.rollback()
@@ -83,6 +88,20 @@ def list_curators_endpoint(database: Database, context: QueryContext) -> list:
 def get_curator_endpoint(user_id: str, database: Database, context: QueryContext):
     result = get_curator(database, context.user, user_id)
     database.commit()
+    return result
+
+
+@router.patch("/curators/{user_id}", response_model=SafeUserResponse)
+def rename_curator_endpoint(
+    user_id: str,
+    payload: DisplayNameUpdate,
+    database: Database,
+    context: MutationContext,
+    _: SameOrigin,
+):
+    target = get_curator(database, context.user, user_id)
+    result = rename_user(database, context.user, target, payload.display_name)
+    _commit(database)
     return result
 
 
@@ -148,6 +167,27 @@ def deactivate_student_account_endpoint(
     user = deactivate_student_account(database, context.user, student_id, request_now(request))
     _commit(database)
     return StudentAccountResponse(student_id=student_id, user=user)
+
+
+@router.post(
+    "/students/{student_id}/reactivate-account",
+    response_model=StudentTemporaryCredentialResponse,
+)
+def reactivate_student_account_endpoint(
+    student_id: str,
+    request: Request,
+    database: Database,
+    context: MutationContext,
+    _: SameOrigin,
+) -> StudentTemporaryCredentialResponse:
+    manager: PasswordManager = request.app.state.password_manager
+    student, user, temporary_password = reactivate_student_account(
+        database, manager, context.user, student_id
+    )
+    _commit(database)
+    return StudentTemporaryCredentialResponse(
+        student_id=student.id, user=user, temporary_password=temporary_password
+    )
 
 
 @router.post("/users/{user_id}/reset-password", response_model=PasswordResetResponse)

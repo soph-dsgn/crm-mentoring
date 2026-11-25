@@ -29,9 +29,15 @@ def test_frontend_image_is_reproducible_rootless_static_packaging() -> None:
     assert "add_header_inherit merge;" in nginx
 
 
-def test_handoff_keeps_browser_local_frontend_limitation_explicit() -> None:
+def test_handoff_routes_browser_and_api_through_one_https_origin() -> None:
+    deploy = REPOSITORY_ROOT / "deploy"
     handoff = (REPOSITORY_ROOT / "docs" / "deployment" / "README.md").read_text(encoding="utf-8")
+    env = (deploy / "backend.env.example").read_text(encoding="utf-8")
+    proxy = (deploy / "nginx-crm.locations.conf.example").read_text(encoding="utf-8")
 
-    assert "localStorage" in handoff
-    assert "IndexedDB" in handoff
-    assert "подключён к защищённым backend API" in handoff
+    assert "Единый HTTPS origin" in handoff
+    assert 'KURATORSKAYA_FRONTEND_ORIGINS=["https://CRM_HOSTNAME"]' in env
+    assert 'KURATORSKAYA_PERMITTED_HOSTS=["CRM_HOSTNAME","127.0.0.1"]' in env
+    assert "location ^~ /api/" in proxy and "proxy_cache off" in proxy
+    assert "location = /health/live" in proxy and "location = /health/ready" in proxy
+    assert "location / { proxy_pass http://127.0.0.1:CRM_WEB_PORT;" in proxy

@@ -40,6 +40,8 @@ ADMIN_ENDPOINT_CASES = (
     ),
     ("GET", "/api/v1/admin/students/missing-student/account", None),
     ("POST", "/api/v1/admin/students/missing-student/deactivate-account", None),
+    ("POST", "/api/v1/admin/students/missing-student/reactivate-account", None),
+    ("PATCH", "/api/v1/admin/curators/missing-user", {"display_name": "Имя"}),
     ("POST", "/api/v1/admin/users/missing-user/reset-password", None),
     (
         "POST",
@@ -62,6 +64,8 @@ ADMIN_OPENAPI_OPERATIONS = {
     ("post", "/api/v1/admin/students/{student_id}/account"),
     ("get", "/api/v1/admin/students/{student_id}/account"),
     ("post", "/api/v1/admin/students/{student_id}/deactivate-account"),
+    ("post", "/api/v1/admin/students/{student_id}/reactivate-account"),
+    ("patch", "/api/v1/admin/curators/{user_id}"),
     ("post", "/api/v1/admin/users/{user_id}/reset-password"),
     ("post", "/api/v1/admin/groups/{group_id}/reassign-curator"),
     ("post", "/api/v1/admin/curators/{user_id}/offboard"),
@@ -377,14 +381,14 @@ def test_owner_creates_curator_with_one_time_temporary_password(
         "/api/v1/auth/change-password",
         json={
             "current_password": body["temporary_password"],
-            "new_password": "a new permanent password",
+            "new_password": "a new permanent passw0rd!",
         },
         headers={
             "Origin": "http://testserver",
             "X-CSRF-Token": client.cookies.get("kuratorskaya_csrf"),
         },
     )
-    assert change_response.status_code == 204
+    assert change_response.status_code == 200
     assert (
         client.post(
             "/api/v1/auth/login",
@@ -1243,3 +1247,100 @@ def test_concurrent_password_resets_leave_only_latest_credential_valid(
             )
             == 2
         )
+
+
+def test_student_account_can_be_reopened_with_new_temporary_password(
+    user_management_context,
+) -> None:
+    client, factory = user_management_context
+    curator = add_user(client, factory, "curator")
+    foreign = add_user(client, factory, "foreign")
+    _, student = add_group_and_student(factory, curator)
+    headers = authenticate(client, curator.login)
+    created = client.post(
+        f"/api/v1/admin/students/{student.id}/account",
+        json={"login": "student.reopen"},
+        headers=headers,
+    )
+    account_id = created.json()["user"]["id"]
+    url = f"/api/v1/admin/students/{student.id}/reactivate-account"
+
+    active = client.post(url, headers=headers)
+    assert active.status_code == 409
+    assert active.json()["error"]["code"] == "user_active"
+
+    assert (
+        client.post(
+            f"/api/v1/admin/students/{student.id}/deactivate-account", headers=headers
+        ).status_code
+        == 200
+    )
+    foreign_headers = authenticate(client, foreign.login)
+    assert client.post(url, headers=foreign_headers).status_code == 404
+
+    headers = authenticate(client, curator.login)
+    reopened = client.post(url, headers=headers)
+
+    assert reopened.status_code == 200
+    body = reopened.json()
+    assert body["user"]["is_active"] is True
+    assert body["user"]["must_change_password"] is True
+    assert body["user"]["deactivated_at"] is None
+    client.cookies.clear()
+    student_login = client.post(
+        "/api/v1/auth/login",
+        json={"login": "student.reopen", "password": body["temporary_password"]},
+        headers={"Origin": "http://testserver"},
+    )
+    assert student_login.status_code == 200
+    with factory() as database:
+        assert database.get(User, account_id).is_active is True
+        assert database.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == AuditAction.USER_REACTIVATED,
+                AuditEvent.target_user_id == account_id,
+            )
+        )
+
+
+def test_display_name_is_editable_by_self_and_owner_only(user_management_context) -> None:
+    client, factory = user_management_context
+    owner = add_user(client, factory, "owner", owner=True)
+    curator = add_user(client, factory, "curator")
+    other = add_user(client, factory, "other")
+
+    headers = authenticate(client, curator.login)
+    own = client.patch(
+        "/api/v1/auth/me", json={"display_name": "  Мария Иванова  "}, headers=headers
+    )
+    assert own.status_code == 200
+    assert own.json()["display_name"] == "Мария Иванова"
+    assert client.get("/api/v1/auth/me").json()["display_name"] == "Мария Иванова"
+    too_long = client.patch("/api/v1/auth/me", json={"display_name": "x" * 121}, headers=headers)
+    assert too_long.status_code == 422
+    no_csrf = client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "Без CSRF"},
+        headers={"Origin": "http://testserver"},
+    )
+    assert no_csrf.status_code == 403
+    foreign = client.patch(
+        f"/api/v1/admin/curators/{other.id}", json={"display_name": "Чужое"}, headers=headers
+    )
+    assert foreign.status_code == 403
+
+    owner_headers = authenticate(client, owner.login)
+    renamed = client.patch(
+        f"/api/v1/admin/curators/{other.id}", json={"display_name": "Пётр"}, headers=owner_headers
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["display_name"] == "Пётр"
+    listed = client.get("/api/v1/admin/curators", headers=owner_headers).json()
+    assert {item["login"]: item["display_name"] for item in listed}["curator"] == "Мария Иванова"
+    created = client.post(
+        "/api/v1/admin/curators",
+        json={"login": "named.curator", "display_name": "Анна"},
+        headers=owner_headers,
+    )
+    assert created.status_code == 201
+    assert created.json()["user"]["display_name"] == "Анна"

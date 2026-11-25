@@ -35,6 +35,10 @@
 .form-more[open] > .form-grid,.form-more[open] > .field { margin-top:16px; }
 .form-more[open] > .check-row { margin-top:12px; }
 .form-more .field + .field { margin-top:12px; }
+.approval-note small { display:block; margin-bottom:4px; color:var(--ui-muted); font-size:12px; }
+.approval-note p { margin:0; }
+.approval-reply { margin-top:4px; }
+.approval-revision .approval-note { background:#fff4e6; color:#6f4a14; }
 .approval-note { margin:12px 0 0; padding:11px 14px; border-radius:12px; background:var(--ui-bg); color:#454a53; font-size:13px; line-height:1.55; white-space:pre-wrap; }
 .approval-details { margin-top:18px; padding-top:15px; border-top:1px solid var(--ui-line); }
 .approval-details .approval-card-fields { margin-top:14px; }
@@ -55,6 +59,7 @@
 .app-shell { position:relative; isolation:isolate; }
 .app-flow-background { inset:0 0 auto; height:340px; }
 .workspace-toolbar,.main,.demo-banner,.save-error { position:relative; z-index:1; }
+.workspace-toolbar { z-index:2; }
 
 :where(.field input,.field textarea,.notes-editor,.approval-card-fields input,.approval-comment textarea,.homework-search,.study-quick input,.study-new-section input,.toolbar-search-panel input,.roster-search) { border:1px solid transparent !important; background:#f7f8fb !important; box-shadow:none; }
 :where(.field input,.field textarea,.notes-editor,.approval-card-fields input,.approval-comment textarea,.homework-search,.study-quick input,.study-new-section input,.toolbar-search-panel input,.roster-search):hover { border-color:#e2e5eb !important; }
@@ -188,3 +193,46 @@ html { scrollbar-gutter:stable; }
   .dialog-head { top:-20px; margin:-20px -20px 18px; padding:20px 20px 12px; }
   .dialog-actions { bottom:-20px; margin:8px -20px -20px; padding:16px 20px 20px; }
 }
+
+.task-handoff { display:grid; gap:12px; margin-top:16px; padding-top:16px; border-top:1px solid var(--ui-line); }
+.task-handoff-actions { display:flex; justify-content:flex-end; gap:8px; }
+
+/* Header: brand on the left, sections centred, search and account menu on the right */
+@media (min-width:1101px) { .workspace-toolbar { grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); } .toolbar-nav { justify-self:center; } }
+.toolbar-badge { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#e25c3b; color:#fff; font-size:11px; font-style:normal; font-weight:700; line-height:1; }
+.workspace-toolbar-right { gap:8px; }
+.account-menu { position:relative; }
+.account-menu-trigger { display:flex; align-items:center; gap:9px; height:42px; padding:0 12px 0 4px; border:0; border-radius:999px; background:#fff; color:#2b3039; }
+.account-menu-trigger:hover { background:#f2f3f7; }
+.account-menu-avatar { display:grid; place-items:center; width:34px; height:34px; flex:none; border-radius:50%; background:#111; color:#fff; font-size:13px; font-weight:700; }
+.account-menu-name { display:flex; flex-direction:column; align-items:flex-start; min-width:0; max-width:160px; line-height:1.15; }
+.account-menu-name strong { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:650; }
+.account-menu-name small { color:var(--ui-muted); font-size:11px; }
+.account-menu-popover { position:absolute; right:0; top:calc(100% + 8px); z-index:40; display:grid; min-width:230px; padding:6px; border-radius:14px; background:#fff; box-shadow:0 18px 50px rgba(15,23,42,.16); }
+.account-menu-popover button { display:flex; align-items:center; gap:10px; height:40px; padding:0 12px; border:0; border-radius:9px; background:transparent; color:#222; text-align:left; font-size:14px; }
+.account-menu-popover button:hover, .account-menu-popover button:focus-visible { background:#f3f4f7; }
+.account-menu-popover hr { width:100%; margin:4px 0; border:0; border-top:1px solid var(--ui-line); }
+.my-account { max-width:760px; }
+.my-account-card { display:grid; gap:24px; }
+.my-account-identity { display:flex; align-items:center; gap:16px; }
+.my-account-identity h2 { margin:0; font-size:24px; }
+.my-account-identity p { margin:4px 0 0; color:var(--ui-muted); }
+.my-account-form { display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px; }
+.my-account-form .field { flex:1 1 280px; }
+.my-account-form .btn { margin-top:24px; }
+.my-account-form small { color:var(--ui-muted); font-size:12px; }
+.my-account-form p { flex-basis:100%; margin:0; }
+.my-account-success { color:#3c6b45; font-size:13px; }
+.my-account-actions { display:flex; flex-wrap:wrap; gap:8px; padding-top:20px; border-top:1px solid var(--ui-line); }
+@media (max-width:1100px) { .toolbar-nav { justify-self:stretch; } }
+@media (max-width:700px) { .account-menu-name { display:none; } .account-menu-trigger { padding:0 8px 0 4px; } }
+
+.date-field { position:relative; display:flex; align-items:center; width:100%; }
+.date-field input[type="text"] { width:100%; padding-right:44px; font-variant-numeric:tabular-nums; }
+.date-field-picker { position:absolute; right:6px; display:grid; place-items:center; width:32px; height:32px; padding:0; border:0; border-radius:8px; background:transparent; color:#555b66; }
+.date-field-picker:hover { background:#eef0f4; color:#111; }
+.date-field-native { position:absolute; right:6px; bottom:0; width:32px; height:1px; padding:0; border:0; opacity:0; pointer-events:none; }
+.date-field.is-invalid input[type="text"] { box-shadow:inset 0 0 0 1px #d9534f; }
+.date-field-error { position:absolute; left:0; top:calc(100% + 4px); color:#b23b37; font-size:12px; }
+.student-workspace { margin-bottom:var(--space-5); }
+.profile-empty-actions { margin-top:16px; }

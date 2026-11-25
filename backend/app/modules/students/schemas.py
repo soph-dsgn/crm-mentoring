@@ -10,7 +10,7 @@ from app.modules.students.models import StudentStage
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 ShortText = Annotated[str, StringConstraints(max_length=255)]
 LongText = Annotated[str, StringConstraints(max_length=20_000)]
-Photo = Annotated[str, StringConstraints(max_length=2_048)]
+Photo = Annotated[str, StringConstraints(max_length=256_000)]
 
 
 class StrictModel(BaseModel):
@@ -57,7 +57,7 @@ class StudentUpdate(StrictModel):
     level: ShortText | None = None
     desired_position: ShortText | None = None
     career_goal: LongText | None = None
-    links: dict[ShortText, HttpUrl] | None = Field(default=None, max_length=50)
+    links: dict[ShortText, HttpUrl | None] | None = Field(default=None, max_length=50)
     background: LongText | None = None
     experience: LongText | None = None
     strengths: LongText | None = None
@@ -100,6 +100,10 @@ class StudentUpdate(StrictModel):
 
 class VersionRequest(StrictModel):
     expected_version: int = Field(ge=1)
+
+
+class StudentTransfer(VersionRequest):
+    target_group_id: str = Field(min_length=1, max_length=36)
 
 
 class StudentSummary(BaseModel):

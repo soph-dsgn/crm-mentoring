@@ -84,6 +84,42 @@ try {
   assert.equal(state.strategyErrorMessage(new http.ApiError(403, 'forbidden', 'no')), 'У вас нет прав изменять эту стратегию')
 
   console.log('Strategies/tasks/Anya approval integration verification passed')
+
+  const importState = await server.ssrLoadModule('/src/strategies/strategyImportState.ts')
+  const importDraft = {
+    source_title: 'Тестовая | Стратегия действий', sha256: 'a'.repeat(64), page_count: 2,
+    profile: { point_a: 'Опыт: дизайн', point_b: null, telegram: 'https://t.me/test_handle' },
+    sections: [{ title: 'Часть 1', tasks: [
+      { title: 'Первая', description: '', period_text: '', materials: [], study_status: 'done' },
+      { title: 'Вторая', description: '', period_text: '', materials: [], study_status: 'hold' },
+      { title: 'Третья', description: '', period_text: '', materials: [], study_status: 'done' },
+    ] }],
+    warnings: [{ code: 'status_missing', count: 2, examples: [] }],
+  }
+  const importStudent = { id: 'student-1', name: 'Тестовая Ученица', pointA: 'Уже заполнено', pointB: '', links: { telegram: '' }, version: 4 }
+  const selection = importState.defaultProfileSelection(importStudent, importDraft.profile)
+  assert.deepEqual(selection, { point_a: false, point_b: false, telegram: true })
+  assert.deepEqual(importState.statusCounts(importDraft), [['hold', 'На паузе', 1], ['done', 'Выполнено', 2]])
+  assert.equal(importState.taskTotal(importDraft), 3)
+  assert.equal(importState.sourceNameMismatch(importDraft, importStudent), null)
+  assert.equal(importState.sourceNameMismatch(importDraft, { ...importStudent, name: 'Другая' }), 'Тестовая')
+  const importPayload = importState.buildImportPayload(importDraft, importStudent, selection, 'strategy.pdf')
+  assert.deepEqual(importPayload.profile, { telegram: 'https://t.me/test_handle' })
+  assert.equal(importPayload.expected_version, 4)
+  assert.equal(importPayload.source.sha256, importDraft.sha256)
+  assert.match(importState.importWarningLabel('status_missing'), /Не начато/)
+  assert.match(importState.strategyImportErrorMessage(new http.ApiError(409, 'strategy_not_empty', 'x')), /пустую стратегию/)
+  const previewCalls = []
+  const fetchBeforePreview = globalThis.fetch
+  globalThis.fetch = async (url, init) => { previewCalls.push({ url, init }); return new Response(JSON.stringify(importDraft), { status: 200, headers: { 'content-type': 'application/json' } }) }
+  try {
+    const preview = await api.strategiesApi.previewImport('student-1', new Blob(['%PDF'], { type: '' }))
+    assert.equal(preview.sha256, importDraft.sha256)
+    assert.equal(previewCalls[0].url, '/api/v1/students/student-1/strategy-import/preview')
+    assert.equal(new Headers(previewCalls[0].init.headers).get('Content-Type'), 'application/pdf')
+  } finally {
+    globalThis.fetch = fetchBeforePreview
+  }
 } finally {
   await server.close()
 }

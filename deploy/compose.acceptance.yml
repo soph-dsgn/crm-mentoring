@@ -1,0 +1,45 @@
+name: kuratorskaya-manual
+
+services:
+  database:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_USER: acceptance
+      POSTGRES_PASSWORD: disposable-local-only
+      POSTGRES_DB: acceptance
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "acceptance", "-d", "acceptance"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    cpus: 0.75
+  backend:
+    build: ../backend
+    environment:
+      KURATORSKAYA_ENVIRONMENT: production
+      KURATORSKAYA_DATABASE_URL: postgresql+psycopg://acceptance:disposable-local-only@database:5432/acceptance
+      KURATORSKAYA_PERMITTED_HOSTS: '["localhost","127.0.0.1"]'
+      KURATORSKAYA_FRONTEND_ORIGINS: '["https://localhost:8443"]'
+    depends_on:
+      database:
+        condition: service_healthy
+    mem_limit: 384m
+    cpus: 0.75
+  frontend:
+    build: ../frontend
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ../private/acceptance-tls:/etc/nginx/acceptance-tls:ro
+      - ./acceptance-proxy.conf:/etc/nginx/kuratorskaya/acceptance.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    mem_limit: 96m
+    cpus: 0.25
+
+volumes:
+  postgres:

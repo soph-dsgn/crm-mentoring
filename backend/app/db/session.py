@@ -38,6 +38,7 @@ def build_engine(
         database_url,
         connect_args=connect_args,
         pool_pre_ping=True,
+        hide_parameters=True,
         **engine_options,
     )
 

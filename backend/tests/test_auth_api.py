@@ -26,7 +26,7 @@ from app.modules.auth.passwords import PasswordManager
 from app.modules.users.models import User, UserRole
 
 PASSWORD = "correct horse battery staple"
-NEW_PASSWORD = "new correct horse battery staple"
+NEW_PASSWORD = "new horse battery staple 42!"
 
 
 class MutableClock:
@@ -126,6 +126,7 @@ def test_successful_login_persists_only_token_hash_and_safe_response(auth_contex
     assert response.json() == {
         "id": user.id,
         "login": "curator",
+        "display_name": "",
         "role": "admin",
         "is_owner": False,
         "must_change_password": False,
@@ -347,16 +348,20 @@ def test_change_password_revokes_all_sessions_and_clears_requirement(auth_contex
         headers=csrf_headers(client),
     )
 
-    assert response.status_code == 204
-    assert client.cookies.get("kuratorskaya_session") is None
+    assert response.status_code == 200
+    assert response.json()["must_change_password"] is False
     assert second_client.get("/api/v1/auth/me").status_code == 401
+    me = client.get("/api/v1/auth/me")
+    assert me.status_code == 200
+    assert me.json()["must_change_password"] is False
+    assert client.get("/test/protected").status_code == 200
     with factory() as database_session:
         persisted_user = database_session.get(User, user.id)
         assert persisted_user.must_change_password is False
         assert client.app.state.password_manager.verify(NEW_PASSWORD, persisted_user.password_hash)
         sessions = database_session.scalars(select(AuthSession)).all()
-        assert len(sessions) == 2
-        assert all(item.revoked_at is not None for item in sessions)
+        assert len(sessions) == 3
+        assert sum(item.revoked_at is None for item in sessions) == 1
     second_client.close()
 
 
@@ -378,7 +383,7 @@ def test_password_change_and_logout_each_use_one_commit(auth_context, monkeypatc
         json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
         headers=csrf_headers(client),
     )
-    assert changed.status_code == 204
+    assert changed.status_code == 200
     assert commit_count == 1
 
     assert login(client, password=NEW_PASSWORD).status_code == 200
@@ -436,11 +441,20 @@ def test_change_password_rejects_bad_current_password_and_missing_csrf(auth_cont
 
     too_short = client.post(
         "/api/v1/auth/change-password",
-        json={"current_password": PASSWORD, "new_password": "too short"},
+        json={"current_password": PASSWORD, "new_password": "short1!"},
         headers=csrf_headers(client),
     )
     assert too_short.status_code == 422
-    assert "too short" not in too_short.text
+    assert too_short.json()["error"]["code"] == "password_too_short"
+    assert "short1!" not in too_short.text
+    for weak_password in ("no digits here!", "no special 1234"):
+        weak = client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": PASSWORD, "new_password": weak_password},
+            headers=csrf_headers(client),
+        )
+        assert weak.status_code == 422
+        assert weak_password not in weak.text
     with factory() as database_session:
         persisted_user = database_session.get(User, user.id)
         assert client.app.state.password_manager.verify(PASSWORD, persisted_user.password_hash)

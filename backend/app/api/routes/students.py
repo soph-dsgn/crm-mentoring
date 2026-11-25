@@ -26,6 +26,7 @@ from app.modules.students.schemas import (
     StudentRead,
     StudentSelfRead,
     StudentSummary,
+    StudentTransfer,
     StudentUpdate,
     VersionRequest,
 )
@@ -34,6 +35,7 @@ from app.modules.students.service import (
     create_student,
     list_students,
     restore_student,
+    transfer_student,
     update_student,
 )
 from app.modules.users.models import UserRole
@@ -109,6 +111,20 @@ def update_student_endpoint(
     _: SameOrigin,
 ) -> Student:
     result = update_student(database, context.user, student, payload, request_now(request))
+    commit(database)
+    return result
+
+
+@router.post("/api/v1/students/{student_id}/transfer", response_model=StudentRead)
+def transfer_student_endpoint(
+    payload: StudentTransfer,
+    request: Request,
+    student: WritableStudent,
+    database: Database,
+    context: MutationContext,
+    _: SameOrigin,
+) -> Student:
+    result = transfer_student(database, context.user, student, payload, request_now(request))
     commit(database)
     return result
 

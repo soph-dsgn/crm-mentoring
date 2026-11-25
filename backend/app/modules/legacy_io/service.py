@@ -593,6 +593,7 @@ def import_legacy(database: Session, actor: User, payload: LegacyImportRequest) 
             description=raw.get("description") or "",
             materials=raw.get("materials") or [],
             links={"primary": url} if url else {},
+            blocker=raw.get("blocker") is True,
             period_text=raw.get("period") or "",
             due_at=_datetime(raw.get("dueAt")),
             position=int(raw.get("order", 0)),
@@ -742,7 +743,7 @@ def export_backup(database: Session, actor: User, exported_at: datetime) -> dict
         "exported_at": exported_at.isoformat(),
         "limitations": [
             "Authentication accounts and secrets are excluded",
-            "IndexedDB knowledge data requires a separate browser export",
+            "Knowledge data requires a separate owner export or an operational PostgreSQL backup",
             "Restore requires matching curator and history actor accounts",
         ],
         "data": data,

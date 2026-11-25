@@ -27,7 +27,7 @@ response fields определяются названными Pydantic schemas, 
 | `POST /api/v1/auth/login` | anonymous | `{login,password}` → `{id,login,role,is_owner,must_change_password,is_active}` | Same-origin; `401`, `429`, `422`; login screen |
 | `GET /api/v1/auth/me` | session | — → current user | Session bootstrap/refresh |
 | `POST /api/v1/auth/logout` | session+CSRF | — → `204` | Всегда очистить local auth state |
-| `POST /api/v1/auth/change-password` | session+CSRF | `{current_password,new_password}` → `204` | Новый пароль min 12; отзывает sessions; повторный login |
+| `POST /api/v1/auth/change-password` | session+CSRF | `{current_password,new_password}` → `200 CurrentUser` | Новый пароль: min 8, цифра и спецсимвол. Отзывает прочие sessions, текущий браузер продолжает работу с новой session |
 | `GET /api/v1/admin/curators` | admin/owner | — → `CuratorPublicResponse[]` | Публичный список сотрудников |
 | `POST /api/v1/admin/curators` | owner | `{login}` → user + `temporary_password` | `201`; показать/copy один раз |
 | `GET /api/v1/admin/curators/{user_id}` | owner | — → safe user | Staff details |

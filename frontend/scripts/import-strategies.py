@@ -10,8 +10,8 @@ from pathlib import Path
 import pdfplumber
 
 logging.getLogger("pdfminer").setLevel(logging.CRITICAL)
-ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "public" / "strategies"
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / "migration-sources" / "strategies"
 OUTPUT = SOURCE / "strategy-seed.json"
 STARTS = {"group_1": "2026-08-03", "group_2": "2026-09-07", "group_3": "2026-09-17", "group_4": "2026-10-01"}
 ENDS = {"group_1": "2027-01-18", "group_2": "2027-03-07", "group_3": "2027-03-17", "group_4": "2027-04-01"}

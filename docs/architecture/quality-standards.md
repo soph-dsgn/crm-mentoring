@@ -48,7 +48,7 @@ Workflow `.github/workflows/ci.yml` запускается для Pull Request �
 - **Backend Quality**: Python 3.13, установка dev-зависимостей, Ruff lint, Ruff format check,
   pytest с branch coverage и порогом 75%, `alembic upgrade head`, `alembic current`,
   `alembic check`
-- **PostgreSQL Integration**: изолированный PostgreSQL service container, полный
+- **PostgreSQL Integration**: изолированный PostgreSQL 18.4 service container, полный
   `tests/test_postgresql.py`, проверка отсутствия skipped tests, migrations, concurrency,
   rollback и operational backup/restore на синтетических данных
 - **Frontend Quality**: Node.js 24 LTS, `npm ci`, ESLint, TypeScript/Vite build и существующая

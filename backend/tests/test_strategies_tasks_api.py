@@ -18,7 +18,6 @@ from app.main import create_app
 from app.modules.groups.models import Group, GroupStatus
 from app.modules.strategies import service as strategy_service
 from app.modules.strategies.models import (
-    AnyaApproval,
     Strategy,
     StrategySection,
     StrategyTask,
@@ -382,71 +381,74 @@ def test_task_lifecycle_history_and_mass_assignment(strategy_api) -> None:
         assert database.get(StrategyTask, task["id"]) is not None
 
 
-def test_approval_resubmission_recall_and_history(strategy_api) -> None:
+def test_approval_handoff_is_reviewed_only_by_owner(strategy_api) -> None:
     client, factory = strategy_api
+    owner = add_user(client, factory, "owner", owner=True)
     curator = add_user(client, factory, "curator")
     group = add_group(factory, curator)
     student = add_student(factory, group, "Ученица")
     headers = authenticate(client, curator.login)
     _, _, task = create_strategy_section_task(client, headers, student)
+    url = f"/api/v1/strategy-tasks/{task['id']}/approval"
 
-    created = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval",
-        json={"comment": "Передать"},
-        headers=headers,
-    )
-    duplicate = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval", json={}, headers=headers
-    )
-    sent = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval/transition",
-        json={"expected_version": 1, "status": "sent"},
-        headers=headers,
-    )
-    stale = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval/transition",
-        json={"expected_version": 1, "status": "reviewing"},
-        headers=headers,
-    )
-    reviewing = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval/transition",
-        json={"expected_version": 2, "status": "reviewing"},
-        headers=headers,
-    )
-    revision = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval/transition",
-        json={"expected_version": 3, "status": "revision", "comment": "Есть правки"},
-        headers=headers,
-    )
-    resent = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval/transition",
-        json={"expected_version": 4, "status": "sent"},
-        headers=headers,
-    )
-    recalled = client.post(
-        f"/api/v1/strategy-tasks/{task['id']}/approval/transition",
-        json={"expected_version": 5, "status": "to_send"},
-        headers=headers,
-    )
+    def move(request_headers, version, status, comment=None):
+        body = {"expected_version": version, "status": status}
+        if comment is not None:
+            body["comment"] = comment
+        return client.post(f"{url}/transition", json=body, headers=request_headers)
 
+    created = client.post(url, json={"comment": "Проверь резюме"}, headers=headers)
     assert created.status_code == 201
-    assert duplicate.status_code == 409
+    assert created.json()["status"] == "sent"
+    assert client.post(url, json={}, headers=headers).status_code == 409
+
+    for status in ("reviewing", "approved", "revision"):
+        forbidden = move(headers, 1, status, "Сама согласую")
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "approval_owner_only"
+
+    recalled = move(headers, 1, "to_send")
+    assert recalled.status_code == 200
+    assert move(headers, 2, "sent", "Теперь с портфолио").status_code == 200
+
+    owner_headers = authenticate(client, owner.login)
+    assert move(owner_headers, 3, "reviewing").status_code == 200
+    no_comment = move(owner_headers, 4, "revision", "  ")
+    assert no_comment.status_code == 422
+    assert no_comment.json()["error"]["code"] == "approval_comment_required"
+    assert move(owner_headers, 4, "revision", "Добавь кейс").status_code == 200
+
+    headers = authenticate(client, curator.login)
+    assert move(headers, 5, "approved").status_code == 403
+    assert move(headers, 5, "sent", "Кейс добавлен").status_code == 200
+    stale = move(headers, 5, "to_send")
     assert stale.status_code == 409
-    assert [response.status_code for response in (sent, reviewing, revision, resent, recalled)] == [
-        200,
-        200,
-        200,
-        200,
-        200,
-    ]
-    assert recalled.json()["status"] == "to_send"
-    assert recalled.json()["comment"] == "Есть правки"
+
+    owner_headers = authenticate(client, owner.login)
+    approved = move(owner_headers, 6, "approved", "Отлично")
+    assert approved.status_code == 200
+    assert approved.json()["comment"] == "Отлично"
+    headers = authenticate(client, curator.login)
+    assert move(headers, 7, "to_send").status_code == 403
     with factory() as database:
-        assert database.scalar(select(AnyaApproval).where(AnyaApproval.task_id == task["id"]))
         history = list(
-            database.scalars(select(TaskHistory).where(TaskHistory.task_id == task["id"]))
+            database.scalars(
+                select(TaskHistory)
+                .where(
+                    TaskHistory.task_id == task["id"], TaskHistory.event_type == "approval_changed"
+                )
+                .order_by(TaskHistory.created_at, TaskHistory.id)
+            )
         )
-        assert len(history) == 7
+        assert [item.details["to"] for item in history] == [
+            "to_send",
+            "sent",
+            "reviewing",
+            "revision",
+            "sent",
+            "approved",
+        ]
+        assert [item.details.get("comment") for item in history][3] == "Добавь кейс"
 
 
 def test_curator_reassignment_blocks_stale_mutation(strategy_api) -> None:
@@ -846,3 +848,58 @@ def test_strategy_routes_require_authentication(strategy_api, method, path, payl
     client, _ = strategy_api
     response = client.request(method, path, json=payload)
     assert response.status_code == 401
+
+
+def test_empty_section_removal_after_task_move(strategy_api) -> None:
+    client, factory = strategy_api
+    curator = add_user(client, factory, "curator")
+    group = add_group(factory, curator)
+    student = add_student(factory, group, "Synthetic student")
+    headers = authenticate(client, curator.login)
+    strategy, source, task = create_strategy_section_task(client, headers, student)
+    target = client.post(
+        f"/api/v1/strategies/{strategy['id']}/sections",
+        json={"title": "Target", "position": 1},
+        headers=headers,
+    ).json()
+    remove = f"/api/v1/strategy-sections/{source['id']}/remove"
+    body = {"expected_version": source["version"]}
+    assert client.post(remove, json=body, headers=headers).status_code == 409
+    response = client.post(
+        f"/api/v1/strategy-tasks/{task['id']}/move",
+        json={"expected_version": task["version"], "target_section_id": target["id"]},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == task["id"]
+    assert response.json()["section_id"] == target["id"]
+    update = client.patch(
+        f"/api/v1/strategy-tasks/{task['id']}",
+        json={"expected_version": response.json()["version"], "blocker": True},
+        headers=headers,
+    )
+    assert update.status_code == 200
+    assert update.json()["blocker"] is True
+    assert client.post(remove, json=body, headers=headers).status_code == 204
+    history = client.get(f"/api/v1/strategy-tasks/{task['id']}/history").json()["items"]
+    assert {item["event_type"] for item in history} >= {"task_created", "task_moved"}
+
+
+def test_curator_lists_approvals_and_student_cannot_read_internal_comment(strategy_api) -> None:
+    client, factory = strategy_api
+    curator = add_user(client, factory, "curator")
+    learner = add_user(client, factory, "learner", role=UserRole.STUDENT)
+    group = add_group(factory, curator)
+    student = add_student(factory, group, "Synthetic student", user=learner)
+    headers = authenticate(client, curator.login)
+    strategy, _, task = create_strategy_section_task(client, headers, student)
+    path = f"/api/v1/strategy-tasks/{task['id']}/approval"
+    comment = "Internal synthetic comment"
+    assert client.post(path, json={"comment": comment}, headers=headers).status_code == 201
+    approvals = f"/api/v1/strategies/{strategy['id']}/approvals"
+    page = client.get(approvals).json()
+    assert [(row["task_id"], row["comment"]) for row in page["items"]] == [(task["id"], comment)]
+    authenticate(client, learner.login)
+    assert client.get(path).status_code == 403
+    assert client.get(approvals).status_code == 403
+    assert client.get(f"/api/v1/strategy-tasks/{task['id']}").status_code == 200

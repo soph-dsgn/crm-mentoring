@@ -1,5 +1,11 @@
 # «Кураторская»: handoff для Софьи и её ChatGPT
 
+## Текущее состояние
+
+Рабочая CRM, аккаунты, стратегии, встречи, ДЗ, миграция и Knowledge используют FastAPI. Рабочий режим всегда серверный. Для запуска используйте [README](README.md), для сценариев проверки — [релизную приёмку](docs/release/FINAL_ACCEPTANCE.md), для интерфейсов — [API-контракт](docs/architecture/api-contract.md). Передача ученицы, перемещение задач и удаление пустых разделов появились в ветке финальной приёмки.
+
+Ниже сохранена история этапов подключения. Для текущих ограничений сверяйте код и результаты проверки.
+
 > Состояние проверено по repository commit `64b413c9f9979e328146e03b972c3c6a586b0e5a`
 > (2026-10-29). Перед любой реализацией нужно повторно сверить текущую ветку с кодом.
 
@@ -115,7 +121,7 @@ Domain workflows существуют локально, но не использ
 - CSRF cookie `kuratorskaya_csrf` читается перед mutation и отправляется как `X-CSRF-Token`
 - mutations также проверяют same-origin
 - `must_change_password=true` блокирует business APIs; доступны change-password/logout
-- change-password отзывает sessions, поэтому UI возвращается к login
+- change-password отзывает остальные sessions и выдаёт новую текущему браузеру, повторный login не нужен
 - error envelope: `{"error":{"code","message","details"}}`
 - `401` session, `403` permission, `404` hidden/missing, `409` version/state conflict, `422` input
 

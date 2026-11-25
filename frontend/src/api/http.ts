@@ -65,7 +65,7 @@ export async function apiRequest<T = void>(path: string, init: ApiRequestInit = 
 
   let response: Response
   try {
-    response = await fetchImpl(path, { ...init, body, headers, credentials: 'include' })
+    response = await fetchImpl(path, { ...init, body, headers, credentials: 'include', cache: 'no-store' })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new ApiError(0, 'connection_error', 'Connection failed')

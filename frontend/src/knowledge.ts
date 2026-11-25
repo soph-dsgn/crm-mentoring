@@ -33,19 +33,19 @@ export interface KnowledgeData {
 const DB_NAME = 'crm-mentoring-knowledge'
 const STORE_NAME = 'documents'
 const DATA_KEY = 'content-v1'
-let saveQueue = Promise.resolve()
 
-function db(): Promise<IDBDatabase> {
+function db(): Promise<IDBDatabase | undefined> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1)
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME)
+    request.onupgradeneeded = () => request.transaction?.abort()
     request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    request.onerror = () => request.error?.name === 'AbortError' ? resolve(undefined) : reject(request.error)
   })
 }
 
 async function readStored(): Promise<KnowledgeData | undefined> {
   const connection = await db()
+  if (!connection) return undefined
   return new Promise((resolve, reject) => {
     const transaction = connection.transaction(STORE_NAME, 'readonly')
     const request = transaction.objectStore(STORE_NAME).get(DATA_KEY)
@@ -57,32 +57,6 @@ async function readStored(): Promise<KnowledgeData | undefined> {
 
 export function readKnowledgeBackup(): Promise<KnowledgeData | undefined> {
   return readStored()
-}
-
-async function writeStored(data: KnowledgeData): Promise<void> {
-  const connection = await db()
-  return new Promise((resolve, reject) => {
-    const transaction = connection.transaction(STORE_NAME, 'readwrite')
-    transaction.objectStore(STORE_NAME).put(data, DATA_KEY)
-    transaction.oncomplete = () => { connection.close(); resolve() }
-    transaction.onerror = () => { connection.close(); reject(transaction.error) }
-  })
-}
-
-export function saveKnowledge(data: KnowledgeData): Promise<void> {
-  const pending = saveQueue.then(() => writeStored(data))
-  saveQueue = pending.catch(() => undefined)
-  return pending
-}
-
-export async function loadKnowledge(): Promise<KnowledgeData> {
-  const stored = await readStored()
-  if (stored?.version === 1) return stored
-  const response = await fetch('/knowledge-seed.json')
-  if (!response.ok) throw new Error('Не удалось загрузить встроенные материалы')
-  const seed = await response.json() as KnowledgeData
-  await saveKnowledge(seed)
-  return seed
 }
 
 export function cleanHtml(html: string): string {
@@ -177,8 +151,8 @@ export async function parseKnowledgeFile(file: File, kind: KnowledgeKind): Promi
     if (part) skills.push(part)
     return skills
   }) : sections
-  const sourceId = sourcePromptFile ? '1Xg7SzmGVX_ZBhCH1fivLwuEVbBPiK9crVt24pCWl4Gg'
-    : sourceTextbookFile ? '10k6JRR5HVF2LZSkmppDCeg4gYNNz-t2bHQGsphCUYsc' : `file:${normalized(file.name)}`
+  const sourceId = sourcePromptFile ? 'legacy:curator-prompts'
+    : sourceTextbookFile ? 'legacy:curator-textbook' : `file:${normalized(file.name)}`
   const records = await Promise.all(parts.filter(s => s.nodes.some(n => n.textContent?.trim())).map(async (section, index) => {
     const sectionHtml = cleanHtml(section.nodes.map(n => n.outerHTML).join(''))
     const title = section.title || `Материал ${index + 1}`

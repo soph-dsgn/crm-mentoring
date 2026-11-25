@@ -17,12 +17,11 @@
 Контейнеры не требуют Docker Compose. Имена сети, контейнеров, портов, hostname и пути в runbook —
 переменные, которые оператор выбирает после read-only inventory.
 
-## Критическое ограничение frontend
+## Единый HTTPS origin
 
-Текущий React frontend продолжает хранить CRM-данные в `localStorage` и знания в IndexedDB. Он не
-подключён к защищённым backend API. Публикация статического образа не превращает его в
-многопользовательскую серверную CRM и не переносит браузерные данные. До отдельной интеграции UI
-нельзя обещать серверную синхронизацию, RBAC или централизованный backup пользовательских данных.
+Один hostname обслуживает React на `/`, FastAPI на `/api/` и отдельные health endpoints. Сессия и токен CSRF принадлежат этому hostname. Готовый шаблон location-блоков находится в [настройках Nginx](../../deploy/nginx-crm.locations.conf.example). Hostname, порты и PostgreSQL target подтверждаются в preflight.
+
+Установите образы на Ubuntu 26.04 LTS с существующей PostgreSQL 18.4. Порядок работ: inventory, полный backup с изолированным restore rehearsal, миграция Alembic отдельной командой, запуск контейнеров, проверка HTTPS и сессии, при необходимости bootstrap. Для отката сохраните предыдущее приложение и pre-migration backup.
 
 ## Порядок документов
 

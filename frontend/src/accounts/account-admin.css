@@ -86,3 +86,7 @@
   .student-account-empty > .btn,.student-account-ready > div:last-child .btn { width:100%; }
 }
 @media(prefers-reduced-motion:reduce) { .account-spinner { animation:none; } }
+
+.account-name-form { display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; margin:4px 0 20px; }
+.account-name-form .field { flex:1; min-width:220px; max-width:420px; }
+.account-name-form .dialog-error { flex-basis:100%; margin:0; }

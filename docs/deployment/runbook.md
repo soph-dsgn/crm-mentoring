@@ -127,25 +127,9 @@ loopback. Readiness должен стать `200`; при недоступной
 
 ## 6. Reverse proxy и HTTPS
 
-Baseline intentionally запускает Uvicorn с `--no-proxy-headers`. Existing proxy должен:
+Один HTTPS hostname обслуживает UI, `/api/`, `/health/live` и `/health/ready`. Подключите [шаблон location-блоков](../../deploy/nginx-crm.locations.conf.example) к согласованному server block. Маршруты API сохраняют исходный путь. Прокси сохраняет Host, Origin, cookies и X-CSRF-Token, очищает непроверенные Forwarded-заголовки и отключает кеширование API. Наружу публикуется только HTTPS.
 
-- завершать TLS и перенаправлять HTTP на HTTPS;
-- проксировать выбранный API hostname на `127.0.0.1:${CRM_API_PORT}`;
-- проксировать frontend hostname на `127.0.0.1:${CRM_WEB_PORT}`;
-- передавать исходный `Host`, но очищать `Forwarded` и `X-Forwarded-*` в baseline;
-- ограничивать request body/timeouts и добавлять HSTS только после проверки HTTPS;
-- сохранять `Origin`, cookies и `X-CSRF-Token`;
-- не публиковать container ports на `0.0.0.0`.
-
-`KURATORSKAYA_PERMITTED_HOSTS` содержит API hostname, а `KURATORSKAYA_FRONTEND_ORIGINS` — точный
-HTTPS origin frontend. Wildcards запрещены. `KURATORSKAYA_TRUSTED_PROXY_IPS=[]` остаётся безопасным
-baseline. Режим с forwarded headers не включайте без отдельной acceptance-проверки прямого peer IP
-и согласованной конфигурации Uvicorn/application.
-
-Если browser frontend позднее подключается к API на другом hostname, оба HTTPS hostname должны
-оставаться в одном schemeful site (например, соседние поддомены одного registrable domain), иначе
-session cookie с `SameSite=Lax` не будет работать для browser API-запросов. Альтернатива — единый
-origin с маршрутизацией `/api`; не ослабляйте `SameSite` ради несогласованной DNS-схемы.
+В `KURATORSKAYA_PERMITTED_HOSTS` укажите этот hostname и `127.0.0.1` для внутренней liveness probe. В `KURATORSKAYA_FRONTEND_ORIGINS` укажите точный HTTPS origin браузера. В baseline Uvicorn использует `--no-proxy-headers`, `KURATORSKAYA_TRUSTED_PROXY_IPS=[]`.
 
 Перед изменением live proxy: сохранить текущий конфиг, выполнить syntax test, подготовить rollback,
 получить подтверждение Юрия, применить reload без остановки других виртуальных хостов.
@@ -154,10 +138,10 @@ origin с маршрутизацией `/api`; не ослабляйте `SameSi
 
 После TLS-публикации проверить:
 
-1. `/health/live` и `/health/ready` через публичный API hostname.
+1. `/health/live` и `/health/ready` через HTTPS origin Кураторской.
 2. Неизвестный Host отклоняется, `/docs` и `/openapi.json` возвращают `404`.
 3. Login первого owner через защищённый API client с корректным frontend Origin.
 4. Ответ требует сменить temporary password; смена выполняется с session cookie и CSRF header.
 5. Старые session cookies после смены пароля недействительны.
-6. Static frontend открывается, но явно остаётся browser-local и не считается backend acceptance.
+6. В браузере открывается серверная CRM. Проверьте сохранение после перезагрузки, 404 для неизвестных путей API и прежних статических PDF/seed JSON.
 7. Operational backup и isolated restore rehearsal проходят по operations runbook.

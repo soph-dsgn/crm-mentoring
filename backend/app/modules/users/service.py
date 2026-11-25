@@ -84,11 +84,13 @@ def create_curator(
     manager: PasswordManager,
     actor: User,
     login: str,
+    display_name: str = "",
 ) -> tuple[User, str]:
     ensure_owner(actor)
     temporary_password = generate_temporary_password()
     user = User(
         login=login,
+        display_name=display_name,
         role=UserRole.ADMIN,
         password_hash=manager.hash(temporary_password),
         is_owner=False,
@@ -210,6 +212,51 @@ def deactivate_student_account(
         details={"student_id": student.id},
     )
     return user
+
+
+def reactivate_student_account(
+    database: Session,
+    manager: PasswordManager,
+    actor: User,
+    student_id: str,
+) -> tuple[Student, User, str]:
+    """Reopen a closed student account with a fresh one-time password."""
+    student, user = get_student_account(database, actor, student_id)
+    if user.is_active:
+        raise _conflict("user_active", "User is already active")
+    temporary_password = generate_temporary_password()
+    result = database.execute(
+        update(User)
+        .where(User.id == user.id, User.is_active.is_(False))
+        .values(
+            is_active=True,
+            deactivated_at=None,
+            must_change_password=True,
+            password_hash=manager.hash(temporary_password),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        database.rollback()
+        raise _conflict("user_active", "User is already active")
+    database.refresh(user)
+    record_audit(
+        database,
+        actor=actor,
+        action=AuditAction.USER_REACTIVATED,
+        target_user_id=user.id,
+        details={"student_id": student.id},
+    )
+    return student, user, temporary_password
+
+
+def rename_user(database: Session, actor: User, target: User, display_name: str) -> User:
+    """Only the user or the owner may change a display name; it never affects access."""
+    if target.id != actor.id:
+        ensure_owner(actor)
+    target.display_name = display_name
+    record_audit(database, actor=actor, action=AuditAction.USER_RENAMED, target_user_id=target.id)
+    return target
 
 
 def _resettable_user(database: Session, actor: User, user_id: str) -> User:

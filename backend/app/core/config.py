@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     permitted_hosts: list[str] = Field(default_factory=list)
     frontend_origins: list[str] = Field(default_factory=list)
     trusted_proxy_ips: list[str] = Field(default_factory=list)
-    auth_password_min_length: int = Field(default=12, ge=12)
+    auth_password_min_length: int = Field(default=8, ge=8)
     auth_argon2_time_cost: int = Field(default=3, gt=0)
     auth_argon2_memory_cost: int = Field(default=65536, ge=1024)
     auth_argon2_parallelism: int = Field(default=4, gt=0)

@@ -23,8 +23,11 @@ export const usersApi = {
   getCurator(userId: string, signal?: AbortSignal) {
     return apiRequest<SafeUser>(`${ADMIN_BASE}/curators/${encodeURIComponent(userId)}`, { signal })
   },
-  createCurator(login: string, signal?: AbortSignal) {
-    return apiRequest<TemporaryCredentialResponse>(`${ADMIN_BASE}/curators`, { method: 'POST', body: { login }, signal })
+  createCurator(login: string, displayName = '', signal?: AbortSignal) {
+    return apiRequest<TemporaryCredentialResponse>(`${ADMIN_BASE}/curators`, { method: 'POST', body: { login, display_name: displayName }, signal })
+  },
+  renameCurator(userId: string, displayName: string, signal?: AbortSignal) {
+    return apiRequest<SafeUser>(`${ADMIN_BASE}/curators/${encodeURIComponent(userId)}`, { method: 'PATCH', body: { display_name: displayName }, signal })
   },
   deactivateCurator(userId: string, signal?: AbortSignal) {
     return apiRequest<SafeUser>(`${ADMIN_BASE}/curators/${encodeURIComponent(userId)}/deactivate`, { method: 'POST', signal })
@@ -53,6 +56,9 @@ export const usersApi = {
   },
   getStudentAccount(studentId: string, signal?: AbortSignal) {
     return apiRequest<StudentAccountResponse>(`${ADMIN_BASE}/students/${encodeURIComponent(studentId)}/account`, { signal })
+  },
+  reactivateStudentAccount(studentId: string, signal?: AbortSignal) {
+    return apiRequest<StudentTemporaryCredentialResponse>(`${ADMIN_BASE}/students/${encodeURIComponent(studentId)}/reactivate-account`, { method: 'POST', signal })
   },
   deactivateStudentAccount(studentId: string, signal?: AbortSignal) {
     return apiRequest<StudentAccountResponse>(`${ADMIN_BASE}/students/${encodeURIComponent(studentId)}/deactivate-account`, { method: 'POST', signal })

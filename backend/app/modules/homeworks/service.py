@@ -376,8 +376,14 @@ def transition_homework(
     if not is_student:
         get_strategy(database, actor, homework.strategy_id, write=True)
     if payload.status is HomeworkStatus.SUBMITTED:
-        submission_text = payload.submission_text or homework.submission_text
-        submission_links = payload.submission_links or homework.submission_links
+        submission_text = (
+            homework.submission_text if payload.submission_text is None else payload.submission_text
+        )
+        submission_links = (
+            homework.submission_links
+            if payload.submission_links is None
+            else payload.submission_links
+        )
         if not submission_text.strip() and not submission_links:
             raise ApiError(422, "submission_required", "Submission text or link is required")
     scope = (

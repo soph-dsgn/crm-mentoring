@@ -7,14 +7,22 @@ from pathlib import Path
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine, select, text
+from sqlalchemy import Engine, select, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import build_engine
 from app.modules.auth.authorization import bootstrap_first_owner
-from app.modules.auth.passwords import PasswordManager, generate_temporary_password
+from app.modules.auth.dependencies import utc_now
+from app.modules.auth.models import AuthSession
+from app.modules.auth.passwords import (
+    LoginFormatError,
+    PasswordManager,
+    generate_temporary_password,
+    normalize_login,
+)
+from app.modules.users.audit import AuditAction, AuditEvent
 from app.modules.users.models import User, UserRole
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -67,16 +75,52 @@ def bootstrap_owner(
             raise
 
 
+def recover_owner(engine: Engine, manager: PasswordManager, login: str) -> tuple[User, str]:
+    _migration_head(engine)
+    with Session(engine, expire_on_commit=False) as database, database.begin():
+        if engine.dialect.name == "sqlite":
+            database.execute(text("BEGIN IMMEDIATE"))
+        owner = database.scalar(
+            select(User)
+            .where(
+                User.normalized_login == normalize_login(login),
+                User.role == UserRole.ADMIN,
+                User.is_owner.is_(True),
+                User.is_active.is_(True),
+            )
+            .with_for_update()
+        )
+        if owner is None:
+            raise RuntimeError("No active owner matches the confirmed login")
+        temporary_password = generate_temporary_password()
+        owner.password_hash = manager.hash(temporary_password)
+        owner.must_change_password = True
+        database.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == owner.id, AuthSession.revoked_at.is_(None))
+            .values(revoked_at=utc_now())
+        )
+        database.add(
+            AuditEvent(
+                actor_user_id=owner.id,
+                target_user_id=owner.id,
+                action=AuditAction.OWNER_CREDENTIAL_RECOVERED,
+                details={"executor": "database_operator"},
+            )
+        )
+        return owner, temporary_password
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create the first CRM owner")
+    parser = argparse.ArgumentParser(description="Initialize or recover access to the CRM owner")
     parser.add_argument("--login", required=True)
     parser.add_argument("--confirm-database", required=True)
-    parser.add_argument("--confirm-first-owner", action="store_true")
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--confirm-first-owner", action="store_true")
+    action.add_argument("--confirm-owner-recovery", action="store_true")
     args = parser.parse_args()
-    if not args.confirm_first_owner:
-        parser.error("--confirm-first-owner is required")
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        parser.error("First-owner credentials require an interactive terminal")
+        parser.error("Temporary owner credentials require an interactive terminal")
 
     settings = get_settings()
     database_name = make_url(settings.database_url).database
@@ -96,7 +140,15 @@ def main() -> None:
         connect_timeout=settings.database_connect_timeout_seconds,
     )
     try:
-        user, temporary_password = bootstrap_owner(engine, manager, args.login)
+        operation = recover_owner if args.confirm_owner_recovery else bootstrap_owner
+        user, temporary_password = operation(engine, manager, args.login)
+    except (RuntimeError, LoginFormatError) as error:
+        hint = ""
+        if str(error) == "An owner already exists":
+            hint = (
+                ". To reset the owner's password use --confirm-owner-recovery with the owner login"
+            )
+        parser.error(f"{error}{hint}")
     finally:
         engine.dispose()
     print(f"Owner login: {user.login}")

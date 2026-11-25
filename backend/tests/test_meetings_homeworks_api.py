@@ -1062,3 +1062,30 @@ def test_homework_rollback_if_history_insert_fails(learning_api, monkeypatch) ->
         current = database.get(Homework, homework["id"])
         assert current.status is HomeworkStatus.DRAFT
         assert len(list(database.scalars(select(HomeworkHistory)))) == 1
+
+
+def test_curator_resubmission_cannot_erase_all_evidence(learning_api) -> None:
+    client, factory = learning_api
+    curator = add_user(client, factory, "curator")
+    student = add_student(factory, add_group(factory, curator), "Synthetic student")
+    task = add_strategy_task(factory, student, "Synthetic task")
+    headers = authenticate(client, curator.login)
+    homework = create_homework(client, headers, task)
+    assert transition(client, headers, homework, "issued").status_code == 200
+    assert (
+        transition(
+            client, headers, homework, "submitted", submission_text="Original evidence"
+        ).status_code
+        == 200
+    )
+    assert transition(client, headers, homework, "revision").status_code == 200
+    rejected = transition(
+        client, headers, homework, "submitted", submission_text="", submission_links={}
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == "submission_required"
+
+    with factory() as database:
+        saved = database.get(Homework, homework["id"])
+        assert saved.status is HomeworkStatus.REVISION
+        assert saved.submission_text == "Original evidence"

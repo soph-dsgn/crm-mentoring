@@ -13,6 +13,7 @@ export const studyStatusOptions = (status: StudyStatus) => transitions[status]
 
 const historyLabels: Record<string, string> = {
   task_created: 'Задача создана', task_updated: 'Данные задачи обновлены', task_reordered: 'Порядок задачи изменён',
+  task_moved: 'Задача перемещена в другой раздел',
   study_status_changed: 'Статус выполнения изменён', task_archived: 'Задача перемещена в архив', task_restored: 'Задача восстановлена',
   approval_created: 'Создано согласование с Аней', approval_changed: 'Статус согласования изменён',
 }
@@ -32,7 +33,7 @@ export function taskFromApi(task: StrategyTaskRead, studentId: string, approval?
     status: task.study_status === 'done' ? 'done' : task.study_status === 'not_started' ? 'backlog' : 'progress',
     studyStatus: task.study_status, sectionId: task.section_id, period: task.period_text, materials: task.materials,
     owner: 'Не назначен', dueAt: task.due_at ?? '', url: links[0] ?? '', comments: '', order: task.position,
-    blocker: false, createdAt: task.created_at, updatedAt: task.updated_at, reviewStatus: task.review_status,
+    blocker: task.blocker, createdAt: task.created_at, updatedAt: task.updated_at, reviewStatus: task.review_status,
     approvalStatus: approval?.status ?? null, approvalType: '', approvalSentAt: approval && approval.status !== 'to_send' ? approval.created_at : '',
     approvalComment: approval?.comment ?? '', history: history.map(historyFromApi), archivedAt: task.archived_at ?? '',
     serverBacked: true, strategyId: task.strategy_id, version: task.version, approvalId: approval?.id, approvalVersion: approval?.version, serverLinks: { ...task.links },
@@ -52,7 +53,12 @@ export function strategyErrorMessage(error: unknown): string {
   switch (error.code) {
     case 'connection_error': return 'Не удалось подключиться к серверу'
     case 'forbidden': return 'У вас нет прав изменять эту стратегию'
+    case 'approval_owner_only': return 'Решение по согласованию принимает только Аня'
+    case 'approval_comment_required': return 'Напишите, что нужно поправить'
     case 'not_found': return 'Стратегия или задача больше недоступна'
+    case 'section_imported': return 'Раздел связан с исходным импортом. Удаление недоступно'
+    case 'section_not_empty': return 'В разделе остались задачи, включая архивные. Переместите задачи перед удалением'
+    case 'position_limit': return 'Сначала обновите порядок задач в разделе назначения'
     case 'version_conflict': return 'Данные изменились в другой сессии. Мы загрузили актуальную версию — проверьте изменения и повторите действие'
     case 'homework_review_pending': return 'Статус задачи заблокирован, пока домашняя работа находится на проверке'
     case 'task_archived': return 'Сначала восстановите задачу из архива'

@@ -90,5 +90,9 @@ export function studentCreateToApi(student: Student): StudentCreateRequest {
 }
 
 export function studentUpdateToApi(student: Student): StudentUpdateRequest {
-  return { ...studentCreateToApi(student), expected_version: student.version ?? 1 }
+  return {
+    ...studentCreateToApi(student),
+    expected_version: student.version ?? 1,
+    links: Object.fromEntries(Object.entries(student.links).map(([key, value]) => [key, value.trim() || null])),
+  }
 }

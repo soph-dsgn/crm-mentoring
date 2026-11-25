@@ -31,6 +31,11 @@ export const studentsApi = {
   update(studentId: string, payload: StudentUpdateRequest, signal?: AbortSignal) {
     return apiRequest<StudentRead>(studentPath(studentId), { method: 'PATCH', body: payload, signal })
   },
+  transfer(studentId: string, targetGroupId: string, expectedVersion: number) {
+    return apiRequest<StudentRead>(`${studentPath(studentId)}/transfer`, {
+      method: 'POST', body: { target_group_id: targetGroupId, expected_version: expectedVersion },
+    })
+  },
   archive(studentId: string, expectedVersion: number, signal?: AbortSignal) {
     return apiRequest<StudentRead>(`${studentPath(studentId)}/archive`, { method: 'POST', body: { expected_version: expectedVersion }, signal })
   },

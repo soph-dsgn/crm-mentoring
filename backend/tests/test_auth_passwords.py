@@ -5,6 +5,7 @@ from app.modules.auth.passwords import (
     PasswordManager,
     generate_temporary_password,
     normalize_login,
+    password_policy_error,
 )
 
 
@@ -32,7 +33,7 @@ def test_password_hash_uses_argon2id() -> None:
     assert "a sufficiently long password" not in password_hash
 
     try:
-        manager.hash("too short")
+        manager.hash("short")
     except ValueError:
         pass
     else:
@@ -64,3 +65,18 @@ def test_temporary_password_is_long_and_has_no_ambiguous_characters() -> None:
 
     assert len(temporary_password) >= 20
     assert set(temporary_password).isdisjoint({"0", "O", "I", "l"})
+
+
+def test_password_policy_requires_eight_characters_digit_and_special() -> None:
+    assert password_policy_error("abc1!xyz", 8) is None
+    assert password_policy_error("Пароль1!", 8) is None
+    assert password_policy_error("ab1!xyz", 8) == "password_too_short"
+    assert password_policy_error("abcdefg!", 8) == "password_too_weak"
+    assert password_policy_error("abcdefg1", 8) == "password_too_weak"
+    assert password_policy_error("abcdef 1", 8) == "password_too_weak"
+
+
+def test_password_manager_accepts_eight_character_password_by_default() -> None:
+    manager = PasswordManager(time_cost=1, memory_cost=1024, parallelism=1)
+
+    assert manager.hash("abc1!xyz").startswith("$argon2id$")

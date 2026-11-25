@@ -14,8 +14,12 @@ export function canManageInitialMigration(user: AccessUser): boolean {
   return canUseKnowledge(user) && user.is_owner
 }
 
-export function knowledgeDataSource(data: KnowledgeData): Record<string, unknown> {
-  return structuredClone(data) as unknown as Record<string, unknown>
+const KNOWLEDGE_DATA_FIELDS = ['version', 'prompts', 'chapters', 'importedAt']
+
+// Exports such as knowledge-seed.json carry descriptive fields ("source"); only data fields are sent.
+export function knowledgeDataSource(data: KnowledgeData | Record<string, unknown>): Record<string, unknown> {
+  const clone = structuredClone(data) as unknown as Record<string, unknown>
+  return Object.fromEntries(Object.entries(clone).filter(([key]) => KNOWLEDGE_DATA_FIELDS.includes(key)))
 }
 
 export function parsedDocumentsSource(records: KnowledgeRecord[], kind: KnowledgeKind, format: 'docx' | 'html' | 'markdown'): Record<string, unknown> {

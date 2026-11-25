@@ -29,6 +29,7 @@ export function accountErrorMessage(error: unknown): string {
     case 'student_account_exists': return 'Для этого профиля аккаунт уже создан'
     case 'invalid_login': return 'Проверьте формат логина'
     case 'user_inactive': return 'Аккаунт уже деактивирован'
+    case 'user_active': return 'Доступ уже открыт. Обновите страницу'
     case 'curator_has_groups': return 'Сначала передайте группы другому куратору'
     case 'invalid_curator': return 'Выберите другого активного куратора'
     case 'invalid_owner': return 'Передать права можно другому активному куратору'
@@ -37,4 +38,13 @@ export function accountErrorMessage(error: unknown): string {
     case 'not_found': return 'Аккаунт или группа больше недоступны'
     default: return error.status === 422 ? 'Проверьте введённые данные' : 'Не удалось выполнить действие'
   }
+}
+
+/** Name shown in the interface: the free-form display name, or the login when it is empty. */
+export function userLabel(user: { login: string; display_name?: string }): string {
+  return user.display_name?.trim() || user.login
+}
+
+export function userInitial(user: { login: string; display_name?: string }): string {
+  return userLabel(user).slice(0, 1).toLocaleUpperCase('ru-RU')
 }

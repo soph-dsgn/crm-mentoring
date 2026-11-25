@@ -41,6 +41,11 @@ from app.modules.users.models import User
 from app.modules.users.service import ensure_admin, ensure_owner, record_audit
 
 MAX_IMPORT_ITEMS = 5000
+# Keep matching import mappings created with the previous source identifiers.
+KNOWN_LEGACY_SOURCE_IDS = {
+    "legacy:curator-prompts": "1Xg7SzmGVX_ZBhCH1fivLwuEVbBPiK9crVt24pCWl4Gg",
+    "legacy:curator-textbook": "10k6JRR5HVF2LZSkmppDCeg4gYNNz-t2bHQGsphCUYsc",
+}
 KNOWLEDGE_DATA_ROOT_FIELDS = {"version", "prompts", "chapters", "importedAt"}
 PARSED_ROOT_FIELDS = {"version", "documents", "importedAt"}
 KNOWLEDGE_RECORD_FIELDS = {
@@ -250,7 +255,8 @@ def _candidate(
     source_id = raw.get("sourceId")
     source_key = None
     if kind is not None and isinstance(legacy_id, str) and isinstance(source_id, str):
-        identity = hashlib.sha256(f"{source_id}\0{legacy_id}".encode()).hexdigest()
+        canonical_source = KNOWN_LEGACY_SOURCE_IDS.get(source_id, source_id)
+        identity = hashlib.sha256(f"{canonical_source}\0{legacy_id}".encode()).hexdigest()
         source_key = f"{kind.value}:{identity}"
     if not source_key or len(source_key) > 768:
         _issue(issues, "invalid_source_identity")

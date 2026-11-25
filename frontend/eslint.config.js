@@ -33,7 +33,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.mjs', 'eslint.config.js'],
+    files: ['scripts/**/*.mjs', 'acceptance/**/*.mjs', 'playwright.config.mjs', 'eslint.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.node,
