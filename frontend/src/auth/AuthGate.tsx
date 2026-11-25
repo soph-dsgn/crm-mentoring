@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { useAuth } from './authContext'
 import { getAccessProfile } from './access'
 import { ChangePasswordScreen, LoginScreen, SessionErrorScreen, SessionLoadingScreen } from './AuthScreens'
@@ -6,12 +6,12 @@ import { ChangePasswordScreen, LoginScreen, SessionErrorScreen, SessionLoadingSc
 const StudentApp=lazy(()=>import('../student/StudentApp'))
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { state, login, logout, changePassword, retrySession } = useAuth()
+  const { state, login, logout, changePassword, retrySession, temporaryPasswordKnown } = useAuth()
   if (state.status === 'checking') return <SessionLoadingScreen/>
   if (state.status === 'error') return <SessionErrorScreen onRetry={retrySession}/>
   if (state.status === 'anonymous') return <LoginScreen reason={state.reason} notice={null} onSubmit={login}/>
-  if (state.status === 'password_change') return <ChangePasswordScreen login={state.user.login} onSubmit={changePassword} onLogout={logout}/>
+  if (state.status === 'password_change') return <ChangePasswordScreen login={state.user.login} onSubmit={changePassword} onLogout={logout} currentKnown={temporaryPasswordKnown}/>
   if (state.user.role === 'student') return <Suspense fallback={<SessionLoadingScreen/>}><StudentApp/></Suspense>
   if (!getAccessProfile(state.user).canUseCrm) return null
-  return children
+  return <Fragment key={`${state.user.id}:${state.user.is_owner}`}>{children}</Fragment>
 }

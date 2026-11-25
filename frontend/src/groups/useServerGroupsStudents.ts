@@ -108,5 +108,15 @@ export function useServerGroupsStudents(identityKey: string) {
     return next
   }, [refreshStudent, withConflictRefresh])
 
-  return { groups, students, status, error, partialErrorCount, load, refreshGroup, refreshStudent, saveGroup, changeGroupStatus, saveStudent, setStudentArchived }
+  const transferStudent = async (student: Student, targetGroupId: string) => {
+    const wire = await withConflictRefresh(
+      () => studentsApi.transfer(student.id, targetGroupId, student.version ?? 1),
+      () => refreshStudent(student.id),
+    )
+    const next = studentFromApi(wire)
+    setStudents(current => replaceById(current, next))
+    return next
+  }
+
+  return { transferStudent, groups, students, status, error, partialErrorCount, load, refreshGroup, refreshStudent, saveGroup, changeGroupStatus, saveStudent, setStudentArchived }
 }

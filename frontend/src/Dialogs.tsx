@@ -86,7 +86,7 @@ export function InputDialog({open,title,label,initialValue='',confirmLabel='Со
     try { await onConfirm(normalized);onClose() } catch { setError('Не удалось сохранить. Попробуйте ещё раз') }
     finally { pendingRef.current=false;setPending(false) }
   }
-  return <Dialog open={open} title={title} onClose={onClose}>
+  return <Dialog open={open} title={title} onClose={onClose} dismissible={!pending}>
     <form className="form" onSubmit={event=>void submit(event)}>
       <label className="field" htmlFor={inputId}><span>{label}</span><input id={inputId} autoFocus value={value} onChange={event=>setValue(event.target.value)}/></label>
       {error&&<p className="dialog-error" role="alert">{error}</p>}

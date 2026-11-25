@@ -38,7 +38,7 @@ export default function StudentAccountPanel({ studentId, canManage }: { studentI
   const [account, setAccount] = useState<StudentAccountResponse | null>(null)
   const [error, setError] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
-  const [confirm, setConfirm] = useState<'reset'|'deactivate'|null>(null)
+  const [confirm, setConfirm] = useState<'reset'|'deactivate'|'reactivate'|null>(null)
   const [credential, dispatchCredential] = useReducer(temporaryCredentialReducer, null)
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -70,16 +70,22 @@ export default function StudentAccountPanel({ studentId, canManage }: { studentI
     setAccount(current => current ? { ...current, user:{ ...current.user, must_change_password:true } } : current)
   }
   const deactivate = async () => setAccount(await usersApi.deactivateStudentAccount(studentId))
+  const reactivate = async () => {
+    const response = await usersApi.reactivateStudentAccount(studentId)
+    setAccount({ student_id: response.student_id, user: response.user })
+    dispatchCredential({ type:'show', credential:{ login:response.user.login, temporaryPassword:response.temporary_password, entryUrl:studentPortalUrl(studentId,window.location.href) } })
+  }
 
   return <section className="surface student-account-panel">
     <div className="section-head"><div><div className="eyebrow">Доступ ученицы</div><h2>Аккаунт</h2></div></div>
     {state==='loading'&&<div className="student-account-state" role="status">Проверяем аккаунт…</div>}
     {state==='error'&&<div className="student-account-state" role="alert"><span>{error}</span><button className="btn secondary" onClick={()=>void load()}><ArrowClockwise size={16}/> Повторить</button></div>}
     {state==='ready'&&!account&&<div className="student-account-empty"><div><UserPlus size={22}/><span><strong>Аккаунт ещё не создан</strong><small>После создания появятся одноразовые данные для первого входа</small></span></div><button className="btn dark" onClick={()=>setCreateOpen(true)}>Создать аккаунт</button></div>}
-    {state==='ready'&&account&&<div className="student-account-ready"><div><ShieldCheck size={22}/><span><strong>{account.user.login}</strong><small>{account.user.is_active?(account.user.must_change_password?'Ожидает смены пароля':'Доступ активен'):'Доступ закрыт'}</small></span></div>{account.user.is_active&&<div><button className="btn secondary" onClick={()=>setConfirm('reset')}><Key size={16}/> Новый временный пароль</button><button className="btn danger" onClick={()=>setConfirm('deactivate')}>Закрыть доступ</button></div>}</div>}
+    {state==='ready'&&account&&<div className="student-account-ready"><div><ShieldCheck size={22}/><span><strong>{account.user.login}</strong><small>{account.user.is_active?(account.user.must_change_password?'Ожидает смены пароля':'Доступ активен'):'Доступ закрыт'}</small></span></div>{account.user.is_active?<div><button className="btn secondary" onClick={()=>setConfirm('reset')}><Key size={16}/> Новый временный пароль</button><button className="btn danger" onClick={()=>setConfirm('deactivate')}>Закрыть доступ</button></div>:<div><button className="btn dark" onClick={()=>setConfirm('reactivate')}>Открыть доступ снова</button></div>}</div>}
     <CreateStudentAccountDialog open={createOpen} studentId={studentId} onClose={()=>setCreateOpen(false)} onCreated={created}/>
     <TemporaryCredentialDialog credential={credential} onClose={()=>dispatchCredential({type:'dismiss'})}/>
     <ConfirmDialog open={confirm==='reset'} title="Выдать новый временный пароль?" description="Все активные сессии ученицы завершатся, при следующем входе потребуется сменить пароль" confirmLabel="Выдать пароль" getErrorMessage={accountErrorMessage} onConfirm={reset} onClose={()=>setConfirm(null)}/>
-    <ConfirmDialog open={confirm==='deactivate'} title="Закрыть доступ ученице?" description="Профиль и учебная история сохранятся, активные сессии завершатся" confirmLabel="Закрыть доступ" danger getErrorMessage={accountErrorMessage} onConfirm={deactivate} onClose={()=>setConfirm(null)}/>
+    <ConfirmDialog open={confirm==='reactivate'} title="Открыть доступ снова?" description="Ученица получит новый временный пароль. Старый пароль больше не подойдёт" confirmLabel="Открыть доступ" getErrorMessage={accountErrorMessage} onConfirm={reactivate} onClose={()=>setConfirm(null)}/>
+    <ConfirmDialog open={confirm==='deactivate'} title="Закрыть доступ ученице?" description="Профиль и учебная история сохранятся, активные сессии завершатся. Доступ можно открыть снова" confirmLabel="Закрыть доступ" danger getErrorMessage={accountErrorMessage} onConfirm={deactivate} onClose={()=>setConfirm(null)}/>
   </section>
 }

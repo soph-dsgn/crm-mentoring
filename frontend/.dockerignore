@@ -5,3 +5,6 @@ dist
 node_modules
 *.local
 *.tsbuildinfo
+public/strategies
+public/knowledge-seed.json
+acceptance

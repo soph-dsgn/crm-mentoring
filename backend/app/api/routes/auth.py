@@ -28,9 +28,12 @@ from app.modules.auth.passwords import (
     PasswordManager,
     canonicalize_login,
     normalize_login,
+    password_policy_error,
 )
 from app.modules.auth.schemas import ChangePasswordRequest, CurrentUserResponse, LoginRequest
 from app.modules.users.models import User
+from app.modules.users.schemas import DisplayNameUpdate
+from app.modules.users.service import rename_user
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 
@@ -119,6 +122,24 @@ def _clear_auth_cookies(response: Response, settings: Settings) -> None:
     )
 
 
+def _add_session(
+    database: Session, settings: Settings, user: User, now: datetime
+) -> tuple[str, str]:
+    session_token = secrets.token_urlsafe(32)
+    csrf_token = secrets.token_urlsafe(32)
+    database.add(
+        AuthSession(
+            user_id=user.id,
+            token_hash=hash_secret(session_token),
+            csrf_token_hash=hash_secret(csrf_token),
+            created_at=now,
+            last_activity_at=now,
+            absolute_expires_at=now + timedelta(days=settings.auth_session_absolute_days),
+        )
+    )
+    return session_token, csrf_token
+
+
 def _invalid_credentials() -> ApiError:
     return ApiError(status.HTTP_401_UNAUTHORIZED, "invalid_credentials", "Invalid credentials")
 
@@ -160,18 +181,7 @@ def login(
 
     if updated_hash != user.password_hash:
         user.password_hash = updated_hash
-    session_token = secrets.token_urlsafe(32)
-    csrf_token = secrets.token_urlsafe(32)
-    database.add(
-        AuthSession(
-            user_id=user.id,
-            token_hash=hash_secret(session_token),
-            csrf_token_hash=hash_secret(csrf_token),
-            created_at=now,
-            last_activity_at=now,
-            absolute_expires_at=now + timedelta(days=settings.auth_session_absolute_days),
-        )
-    )
+    session_token, csrf_token = _add_session(database, settings, user, now)
     database.commit()
     _set_auth_cookies(response, request, session_token, csrf_token)
     return user
@@ -180,6 +190,18 @@ def login(
 @router.get("/me", response_model=CurrentUserResponse)
 def me(context: Annotated[AuthContext, Depends(require_auth_context)]) -> User:
     context.database.commit()
+    return context.user
+
+
+@router.patch("/me", response_model=CurrentUserResponse)
+def update_me(
+    payload: DisplayNameUpdate,
+    database: Annotated[Session, Depends(get_db)],
+    context: Annotated[AuthContext, Depends(require_csrf_session)],
+    _: Annotated[None, Depends(require_same_origin)],
+) -> User:
+    rename_user(database, context.user, context.user, payload.display_name)
+    database.commit()
     return context.user
 
 
@@ -199,7 +221,7 @@ def logout(
     _clear_auth_cookies(response, settings)
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", response_model=CurrentUserResponse)
 def change_password(
     payload: ChangePasswordRequest,
     request: Request,
@@ -207,14 +229,17 @@ def change_password(
     database: Annotated[Session, Depends(get_db)],
     context: Annotated[AuthContext, Depends(require_csrf_session)],
     _: Annotated[None, Depends(require_same_origin)],
-) -> None:
+) -> User:
     settings: Settings = request.app.state.settings
     manager: PasswordManager = request.app.state.password_manager
-    if len(payload.new_password) < settings.auth_password_min_length:
+    policy_error = password_policy_error(payload.new_password, settings.auth_password_min_length)
+    if policy_error is not None:
         raise ApiError(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "password_too_short",
-            "Password too short",
+            policy_error,
+            "Password must contain a digit and a special character"
+            if policy_error == "password_too_weak"
+            else "Password too short",
         )
     if not manager.verify(payload.current_password, context.user.password_hash):
         raise _invalid_credentials()
@@ -227,5 +252,8 @@ def change_password(
         .where(AuthSession.user_id == context.user.id, AuthSession.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+    # Every previous session is revoked; the current browser continues on a fresh one.
+    session_token, csrf_token = _add_session(database, settings, context.user, now)
     database.commit()
-    _clear_auth_cookies(response, settings)
+    _set_auth_cookies(response, request, session_token, csrf_token)
+    return context.user

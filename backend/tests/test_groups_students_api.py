@@ -282,6 +282,13 @@ def test_student_patch_is_partial_merges_links_and_detects_lost_update(business_
         "resume": "https://example.com/resume",
     }
     assert first.json()["personal_notes"] == "Сохранить"
+    removed = client.patch(
+        f"/api/v1/students/{student.id}",
+        json={"expected_version": first.json()["version"], "links": {"portfolio": None}},
+        headers=headers,
+    )
+    assert removed.status_code == 200
+    assert removed.json()["links"] == {"resume": "https://example.com/resume"}
     assert stale.status_code == 409
     with factory() as database:
         persisted = database.get(Student, student.id)
@@ -333,10 +340,13 @@ def test_openapi_contains_groups_and_students_operations(business_api) -> None:
         ("post", "/api/v1/groups/{group_id}/students"),
         ("get", "/api/v1/students/{student_id}"),
         ("patch", "/api/v1/students/{student_id}"),
+        ("post", "/api/v1/students/{student_id}/transfer"),
         ("post", "/api/v1/students/{student_id}/archive"),
         ("post", "/api/v1/students/{student_id}/restore"),
         ("get", "/api/v1/students/{student_id}/strategy"),
         ("post", "/api/v1/students/{student_id}/strategy"),
+        ("post", "/api/v1/students/{student_id}/strategy-import/preview"),
+        ("post", "/api/v1/students/{student_id}/strategy-import"),
         ("get", "/api/v1/students/{student_id}/meetings"),
         ("post", "/api/v1/students/{student_id}/meetings"),
     }
@@ -839,3 +849,35 @@ def test_failed_audit_commit_rolls_back_group_update(business_api, monkeypatch) 
         assert persisted.name == "До изменения"
         assert persisted.version == 1
         assert database.get(AuditEvent, "invalid-event") is None
+
+
+def test_student_transfer_is_versioned_and_preserves_account(business_api) -> None:
+    client, factory = business_api
+    curator = add_user(client, factory, "curator")
+    owner = add_user(client, factory, "owner", owner=True)
+    account = add_user(client, factory, "learner", role=UserRole.STUDENT)
+    source = add_group(factory, curator, "Source")
+    same_curator = add_group(factory, curator, "Second")
+    other_curator = add_group(factory, owner, "Third")
+    student = add_student(factory, source, "Synthetic student", user=account)
+    path = f"/api/v1/students/{student.id}/transfer"
+
+    def transfer(group, version, headers):
+        return client.post(
+            path, json={"target_group_id": group.id, "expected_version": version}, headers=headers
+        )
+
+    headers = authenticate(client, curator.login)
+    assert transfer(other_curator, student.version, headers).status_code == 403
+    response = transfer(same_curator, student.version, headers)
+    assert response.status_code == 200
+    assert response.json()["id"] == student.id
+    assert response.json()["group_id"] == same_curator.id
+
+    headers = authenticate(client, owner.login)
+    assert transfer(other_curator, student.version, headers).status_code == 409
+    assert transfer(other_curator, response.json()["version"], headers).status_code == 200
+    with factory() as database:
+        saved = database.get(Student, student.id)
+        assert saved.user_id == account.id
+        assert saved.group_id == other_curator.id

@@ -38,13 +38,15 @@ async def _payload(request: Request) -> LegacyImportRequest:
             "payload_too_large",
             "Import payload is too large",
         )
-    body = await request.body()
-    if len(body) > MAX_IMPORT_BYTES:
-        raise ApiError(
-            status.HTTP_413_CONTENT_TOO_LARGE,
-            "payload_too_large",
-            "Import payload is too large",
-        )
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_IMPORT_BYTES:
+            raise ApiError(
+                status.HTTP_413_CONTENT_TOO_LARGE,
+                "payload_too_large",
+                "Import payload is too large",
+            )
+        body.extend(chunk)
     try:
         raw = json.loads(body)
         if not _within_depth(raw):

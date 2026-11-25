@@ -79,14 +79,13 @@ try {
   assert.match(pageSource,/code === 'connection_error'/)
   assert.match(pageSource,/setFlow\('uncertain'\); setReport\(null\)/)
   assert.match(pageSource,/confirmation_checksum: report\.checksum, confirm: true/)
-  assert.match(pageSource,/markServerCutover\(\)/)
+  assert.doesNotMatch(pageSource,/markServerCutover\(\)/)
   assert.equal(pageSource.includes('localStorage.removeItem'),false)
   assert.equal(pageSource.includes("setItem(STORAGE_KEY"),false)
 
   const appSource=await fs.readFile(new URL('../src/App.tsx',import.meta.url),'utf8')
-  assert.match(appSource,/if \(serverCutover\) return/)
-  assert.match(appSource,/skipInitialLegacySave\.current/)
-  assert.match(appSource,/localStorage\.getItem\(STORAGE_KEY\)\?\?JSON\.stringify/)
+  assert.doesNotMatch(appSource,/hasServerCutover|loadData|localStorage\.setItem|openLegacyStudent/)
+  assert.match(pageSource,/localStorage\.getItem\(STORAGE_KEY\)/)
   assert.equal(appSource.includes('importBackup'),false)
 
   console.log('Browser-data migration verification passed')

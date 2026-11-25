@@ -160,6 +160,7 @@ h2, .section-head h2, .strategy-toolbar h2 { font-size: 24px; line-height: 32px;
 .profile-facts { padding: 28px; }
 .fact-grid small, .career-goal small, .about-grid small, .point-card small { color: var(--ui-muted); font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; }
 .fact-grid strong, .about-grid p, .point-card p, .career-goal p { font-size: 15px; line-height: 23px; }
+.about-grid p, .point-card p, .career-goal p { white-space: pre-line; }
 .profile-tab-surface { max-width: none; }
 .profile-empty p, .meeting-list p, .notes-hint, .photo-editor p, .form-helper { font-size: 14px; line-height: 22px; }
 .notes-editor { font-size: 15px; line-height: 24px; }

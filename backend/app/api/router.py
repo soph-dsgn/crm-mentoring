@@ -10,6 +10,7 @@ from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.knowledge_imports import router as knowledge_imports_router
 from app.api.routes.meetings import router as meetings_router
 from app.api.routes.strategies import router as strategies_router
+from app.api.routes.strategy_imports import router as strategy_imports_router
 from app.api.routes.students import router as students_router
 
 api_router = APIRouter()
@@ -19,6 +20,7 @@ api_router.include_router(admin_users_router)
 api_router.include_router(groups_router)
 api_router.include_router(students_router)
 api_router.include_router(strategies_router)
+api_router.include_router(strategy_imports_router)
 api_router.include_router(meetings_router)
 api_router.include_router(homeworks_router)
 api_router.include_router(imports_router)

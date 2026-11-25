@@ -42,3 +42,41 @@
 @media (max-width:1000px) { .study-task { flex-wrap:wrap; } .study-task-title { flex-basis:calc(100% - 44px); } .study-status { margin-left:29px; } .study-task-actions { margin-left:auto; } }
 @media (max-width:700px) { .study-plan-head { align-items:flex-start; flex-direction:column; } .study-plan-head .btn { width:100%; justify-content:center; } .study-section { padding:0 16px; } .study-section-head { align-items:flex-start; flex-direction:column; gap:0; padding:12px 0; } .study-section-actions { justify-content:flex-start; padding:0 0 10px 30px; } .study-move { max-width:180px; } }
 @media (max-width:480px) { .study-plan-head h2 { font-size:22px; line-height:30px; } .study-task-title strong { white-space:normal; } .study-task-title small { white-space:normal; } .study-new-section { flex-direction:column; } }
+
+/* Strategy import from Notion */
+.strategy-import-drop { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 1px dashed #cfd5de; border-radius: 16px; background: #f8f9fb; color: #5d636e; transition: border-color .18s, background .18s; }
+.strategy-import-drop.is-dragging { border-color: #6d8fd6; background: #f1f5fd; }
+.strategy-import-drop > div { flex: 1; min-width: 0; }
+.strategy-import-drop strong { display: block; color: #222; font-size: 14px; overflow-wrap: anywhere; }
+.strategy-import-drop p { margin: 3px 0 0; font-size: 12px; line-height: 18px; }
+.strategy-import .knowledge-alert { margin-bottom: 0; }
+.strategy-import .knowledge-alert.warning { background: #fff7e8; color: #7a5317; justify-content: flex-start; }
+.strategy-import-sections, .strategy-import-profile { display: grid; gap: 8px; }
+.strategy-import-sections h4, .strategy-import-profile h4 { margin: 0; font-size: 13px; }
+.strategy-import-section { border-radius: 12px; background: #fff; }
+.strategy-import-section > button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 13px; border: 0; border-radius: 12px; background: transparent; color: #222; text-align: left; font-size: 13px; font-weight: 600; }
+.strategy-import-section > button span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.strategy-import-section > button small { color: #777b85; font-weight: 500; white-space: nowrap; }
+.strategy-import-section > button svg { flex: none; transition: transform .18s; }
+.strategy-import-section > button svg.is-open { transform: rotate(180deg); }
+.strategy-import-section ol { display: grid; gap: 6px; margin: 0; padding: 0 13px 12px 32px; font-size: 12px; line-height: 18px; }
+.strategy-import-section li span { overflow-wrap: anywhere; }
+.strategy-import-status { margin-left: 8px; padding: 2px 7px; border-radius: 99px; background: #f1f2f5; color: #666b75; font-size: 11px; white-space: nowrap; }
+.strategy-import-status.status-done { background: #e8f5ea; color: #3c6b45; }
+.strategy-import-status.status-in_progress { background: #e9f0fd; color: #3b5a96; }
+.strategy-import-status.status-hold { background: #fff4e2; color: #845a1b; }
+.strategy-import-profile label { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-radius: 12px; background: #fff; cursor: pointer; }
+.strategy-import-profile input { margin-top: 3px; flex: none; }
+.strategy-import-profile span { display: grid; gap: 4px; min-width: 0; }
+.strategy-import-profile strong { font-size: 13px; }
+.strategy-import-profile small { color: #6c717b; font-size: 12px; line-height: 18px; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.strategy-import .dialog-actions { margin-top: 0; }
+.strategy-import .knowledge-import-counts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.strategy-import .strategy-import-notes { background: #fff7e8; color: #6f4c16; }
+.profile-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+@media (max-width: 560px) {
+  .strategy-import-drop { flex-wrap: wrap; }
+  .strategy-import-drop .btn { width: 100%; }
+  .strategy-import .knowledge-import-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strategy-import .dialog-actions { flex-direction: column-reverse; align-items: stretch; }
+}

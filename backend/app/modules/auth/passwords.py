@@ -28,6 +28,17 @@ def normalize_login(value: str) -> str:
     return normalized
 
 
+def password_policy_error(password: str, minimum_length: int) -> str | None:
+    """Return an error code for a user-chosen password, or None when it is acceptable."""
+    if len(password) < minimum_length:
+        return "password_too_short"
+    has_digit = any(character.isdigit() for character in password)
+    has_special = any(not character.isalnum() and not character.isspace() for character in password)
+    if not (has_digit and has_special):
+        return "password_too_weak"
+    return None
+
+
 class PasswordManager:
     def __init__(
         self,
@@ -35,7 +46,7 @@ class PasswordManager:
         time_cost: int,
         memory_cost: int,
         parallelism: int,
-        minimum_length: int = 12,
+        minimum_length: int = 8,
     ) -> None:
         self._hasher = PasswordHasher(
             time_cost=time_cost,

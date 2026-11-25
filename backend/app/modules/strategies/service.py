@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import status
-from sqlalchemy import and_, exists, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
@@ -11,6 +11,7 @@ from app.api.pagination import decode_cursor, encode_cursor
 from app.modules.auth.authorization import can_read_student, can_update_student, is_owner
 from app.modules.auth.dependencies import utc_now
 from app.modules.groups.models import Group
+from app.modules.legacy_io.models import LegacyIdMapping
 from app.modules.strategies.models import (
     AnyaApproval,
     ApprovalStatus,
@@ -29,6 +30,7 @@ from app.modules.strategies.schemas import (
     SectionUpdate,
     StrategyCreate,
     TaskCreate,
+    TaskMove,
     TaskStatusChange,
     TaskUpdate,
 )
@@ -245,6 +247,50 @@ def update_section(
     return section
 
 
+def remove_section(
+    database: Session, actor: User, section: StrategySection, expected_version: int
+) -> None:
+    strategy = get_strategy(database, actor, section.strategy_id, write=True)
+    _lock_strategy_write(database, strategy, actor)
+    if (
+        database.scalar(
+            select(StrategyTask.id).where(StrategyTask.section_id == section.id).limit(1)
+        )
+        is not None
+    ):
+        raise _conflict("section_not_empty", "Move tasks before removing the section")
+    if (
+        database.scalar(
+            select(LegacyIdMapping.id)
+            .where(
+                LegacyIdMapping.entity_type == "section", LegacyIdMapping.target_id == section.id
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        raise _conflict("section_imported", "Section is linked to a legacy import")
+    result = database.execute(
+        delete(StrategySection)
+        .where(
+            StrategySection.id == section.id,
+            StrategySection.version == expected_version,
+            _write_scope(strategy.id, actor),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        database.rollback()
+        raise _conflict("version_conflict", "Strategy section changed by another request")
+    record_audit(
+        database,
+        actor=actor,
+        action=AuditAction.SECTION_REMOVED,
+        target_group_id=_group_id(database, strategy.id),
+        details={"strategy_id": strategy.id, "section_id": section.id, "title": section.title},
+    )
+
+
 def reorder_sections(
     database: Session,
     actor: User,
@@ -318,6 +364,8 @@ def create_task(
     _lock_strategy_write(database, strategy, actor)
     values = payload.model_dump()
     values["links"] = {key: str(value) for key, value in payload.links.items()}
+    if database.scalar(select(StrategySection.id).where(StrategySection.id == section.id)) is None:
+        raise _conflict("version_conflict", "Strategy section was removed")
     task = StrategyTask(strategy_id=section.strategy_id, section_id=section.id, **values)
     database.add(task)
     database.flush()
@@ -438,6 +486,55 @@ def _update_task_row(
         database.rollback()
         raise _conflict("version_conflict", "Strategy task changed by another request")
     database.refresh(task)
+    return task
+
+
+def move_task(
+    database: Session, actor: User, task: StrategyTask, payload: TaskMove, now: datetime
+) -> StrategyTask:
+    strategy = get_strategy(database, actor, task.strategy_id, write=True)
+    _lock_strategy_write(database, strategy, actor)
+    database.refresh(task)
+    if task.version != payload.expected_version:
+        raise _conflict("version_conflict", "Strategy task changed by another request")
+    if task.archived_at is not None:
+        raise _conflict("task_archived", "Restore the task before moving it")
+    if task.review_status in {ReviewStatus.PENDING, ReviewStatus.REVISION}:
+        raise _conflict("homework_review_pending", "Task is locked during homework review")
+    target = database.scalar(
+        select(StrategySection).where(
+            StrategySection.id == payload.target_section_id,
+            StrategySection.strategy_id == strategy.id,
+        )
+    )
+    if target is None:
+        raise _not_found("Target strategy section")
+    if target.id == task.section_id:
+        return task
+    max_position = database.scalar(
+        select(func.max(StrategyTask.position)).where(StrategyTask.section_id == target.id)
+    )
+    position = 0 if max_position is None else max_position + 1
+    if position > 10_000:
+        raise _conflict("position_limit", "Reorder tasks in the destination before moving")
+    details = {"source_section_id": task.section_id, "target_section_id": target.id}
+    _update_task_row(
+        database,
+        actor,
+        task,
+        payload.expected_version,
+        {"section_id": target.id, "position": position},
+        now,
+        require_review_unlocked=True,
+    )
+    _history(database, task_id=task.id, actor=actor, event_type="task_moved", details=details)
+    record_audit(
+        database,
+        actor=actor,
+        action=AuditAction.TASK_MOVED,
+        target_group_id=_group_id(database, strategy.id),
+        details={"task_id": task.id, **details},
+    )
     return task
 
 
@@ -589,6 +686,22 @@ def list_history(
     return items, encode_cursor(items[-1].id) if has_more else None
 
 
+def list_approvals(
+    database: Session, strategy: Strategy, *, cursor: str | None, limit: int
+) -> tuple[list[AnyaApproval], str | None]:
+    statement = (
+        select(AnyaApproval)
+        .join(StrategyTask, StrategyTask.id == AnyaApproval.task_id)
+        .where(StrategyTask.strategy_id == strategy.id)
+    )
+    cursor_id = decode_cursor(cursor)
+    if cursor_id is not None:
+        statement = statement.where(AnyaApproval.id > cursor_id)
+    rows = list(database.scalars(statement.order_by(AnyaApproval.id).limit(limit + 1)))
+    items = rows[:limit]
+    return items, encode_cursor(items[-1].id) if len(rows) > limit else None
+
+
 def get_approval(database: Session, task: StrategyTask) -> AnyaApproval:
     approval = database.scalar(select(AnyaApproval).where(AnyaApproval.task_id == task.id))
     if approval is None:
@@ -608,7 +721,8 @@ def create_approval(
     if strategy is None:
         raise _not_found("Strategy")
     _lock_strategy_write(database, strategy, actor)
-    approval = AnyaApproval(task_id=task.id, comment=payload.comment)
+    # Creating an approval is the handoff itself: the task lands straight in Anya's queue.
+    approval = AnyaApproval(task_id=task.id, status=ApprovalStatus.SENT, comment=payload.comment)
     database.add(approval)
     database.flush()
     _history(database, task_id=task.id, actor=actor, event_type="approval_created")
@@ -622,16 +736,25 @@ def create_approval(
     return approval
 
 
-APPROVAL_TRANSITIONS = {
+# Curators hand a task over, withdraw it before review starts and resubmit after revision.
+CURATOR_APPROVAL_TRANSITIONS = {
     ApprovalStatus.TO_SEND: {ApprovalStatus.SENT},
-    ApprovalStatus.SENT: {ApprovalStatus.REVIEWING, ApprovalStatus.TO_SEND},
-    ApprovalStatus.REVIEWING: {
+    ApprovalStatus.SENT: {ApprovalStatus.TO_SEND},
+    ApprovalStatus.REVIEWING: set(),
+    ApprovalStatus.REVISION: {ApprovalStatus.SENT},
+    ApprovalStatus.APPROVED: set(),
+}
+# Review decisions belong to the owner (Anya) only.
+OWNER_APPROVAL_TRANSITIONS = {
+    ApprovalStatus.TO_SEND: set(),
+    ApprovalStatus.SENT: {
+        ApprovalStatus.REVIEWING,
         ApprovalStatus.REVISION,
         ApprovalStatus.APPROVED,
-        ApprovalStatus.TO_SEND,
     },
-    ApprovalStatus.REVISION: {ApprovalStatus.SENT, ApprovalStatus.TO_SEND},
-    ApprovalStatus.APPROVED: {ApprovalStatus.TO_SEND},
+    ApprovalStatus.REVIEWING: {ApprovalStatus.REVISION, ApprovalStatus.APPROVED},
+    ApprovalStatus.REVISION: set(),
+    ApprovalStatus.APPROVED: {ApprovalStatus.REVISION},
 }
 
 
@@ -643,8 +766,22 @@ def transition_approval(
     payload: ApprovalTransition,
     now: datetime,
 ) -> AnyaApproval:
-    if payload.status not in APPROVAL_TRANSITIONS[approval.status]:
+    curator_allowed = CURATOR_APPROVAL_TRANSITIONS[approval.status]
+    owner_allowed = curator_allowed | OWNER_APPROVAL_TRANSITIONS[approval.status]
+    if not is_owner(actor) and payload.status not in curator_allowed:
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            "approval_owner_only",
+            "Only the owner can review approvals",
+        )
+    if payload.status not in owner_allowed:
         raise _conflict("invalid_approval_transition", "Approval transition is not allowed")
+    if payload.status is ApprovalStatus.REVISION and not (payload.comment or "").strip():
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "approval_comment_required",
+            "Describe the requested changes",
+        )
     previous = approval.status
     values: dict[str, object] = {"status": payload.status}
     if payload.comment is not None:
@@ -668,7 +805,11 @@ def transition_approval(
         task_id=task.id,
         actor=actor,
         event_type="approval_changed",
-        details={"from": previous.value, "to": payload.status.value},
+        details={
+            "from": previous.value,
+            "to": payload.status.value,
+            **({"comment": payload.comment} if payload.comment else {}),
+        },
     )
     record_audit(
         database,

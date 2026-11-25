@@ -3,14 +3,16 @@ import { ArrowClockwiseIcon, CheckCircleIcon, EyeIcon, EyeSlashIcon, SignOutIcon
 import { FlowBackground } from '../FlowBackground'
 import { ApiError } from '../api/http'
 import type { AnonymousReason } from './authState'
-import { validateLogin, validatePasswordChange, type FieldErrors } from './formValidation'
+import { PASSWORD_MIN_LENGTH, passwordRequirements, validateLogin, validatePasswordChange, type FieldErrors } from './formValidation'
 
 function authErrorMessage(error: unknown, context: 'login' | 'password'): string {
   if (!(error instanceof ApiError)) return 'Не удалось выполнить действие. Попробуйте ещё раз'
   if (error.code === 'connection_error') return 'Нет соединения с сервером. Проверьте интернет и повторите попытку'
   if (error.code === 'rate_limited') return 'Слишком много попыток. Подождите немного и попробуйте снова'
-  if (error.code === 'invalid_credentials') return context === 'login' ? 'Логин или пароль не подходят' : 'Временный пароль введён неверно'
-  if (error.code === 'password_too_short' || error.status === 422) return 'Проверьте поля и попробуйте снова'
+  if (error.code === 'invalid_credentials') return context === 'login' ? 'Логин или пароль не подходят' : 'Текущий пароль введён неверно'
+  if (error.code === 'password_too_short') return `Пароль должен быть не короче ${PASSWORD_MIN_LENGTH} символов`
+  if (error.code === 'password_too_weak') return 'Пароль должен содержать цифру и спецсимвол'
+  if (error.status === 422) return 'Проверьте поля и попробуйте снова'
   return 'Сервер не смог выполнить запрос. Попробуйте ещё раз'
 }
 
@@ -106,7 +108,13 @@ export function LoginScreen({ reason, notice, onSubmit }: { reason: AnonymousRea
   </AuthLayout>
 }
 
-export function ChangePasswordScreen({ login, onSubmit, onLogout }: { login: string; onSubmit: (payload: { current_password: string; new_password: string }) => Promise<void>; onLogout: () => Promise<void> }) {
+export function ChangePasswordScreen({ login, onSubmit, onLogout, currentKnown = false }: { login: string; onSubmit: (payload: { current_password: string; new_password: string }) => Promise<void>; onLogout: () => Promise<void>; currentKnown?: boolean }) {
+  return <AuthLayout title="Создайте новый пароль" description={`Аккаунт ${login} использует временный пароль. Придумайте постоянный — после сохранения сразу откроется рабочее место`}>
+    <ChangePasswordForm onSubmit={onSubmit} onLogout={onLogout} currentKnown={currentKnown}/>
+  </AuthLayout>
+}
+
+export function ChangePasswordForm({onSubmit, onLogout, currentKnown = false}: {onSubmit: (payload: { current_password: string; new_password: string }) => Promise<void>; onLogout?: () => Promise<void>; currentKnown?: boolean}) {
   const currentId = useId()
   const newId = useId()
   const confirmationId = useId()
@@ -117,20 +125,22 @@ export function ChangePasswordScreen({ login, onSubmit, onLogout }: { login: str
   const [errors, setErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState('')
   const [pending, setPending] = useState(false)
+  const [askCurrent, setAskCurrent] = useState(!currentKnown)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (pendingRef.current) return
-    const nextErrors = validatePasswordChange(currentPassword, newPassword, confirmation)
+    const nextErrors = validatePasswordChange(askCurrent ? currentPassword : 'known', newPassword, confirmation)
     setErrors(nextErrors)
     setFormError('')
     if (Object.keys(nextErrors).length) return
     pendingRef.current = true
     setPending(true)
     try {
-      await onSubmit({ current_password: currentPassword, new_password: newPassword })
+      await onSubmit({ current_password: askCurrent ? currentPassword : '', new_password: newPassword })
     } catch (error) {
       setCurrentPassword('')
+      if (error instanceof ApiError && error.code === 'invalid_credentials') setAskCurrent(true)
       setFormError(authErrorMessage(error, 'password'))
     } finally {
       pendingRef.current = false
@@ -138,17 +148,24 @@ export function ChangePasswordScreen({ login, onSubmit, onLogout }: { login: str
     }
   }
 
-  return <AuthLayout title="Создайте новый пароль" description={`Аккаунт ${login} использует временный пароль. Смените его перед началом работы`}>
-    <div className="auth-requirements" aria-label="Требования к паролю"><strong>Новый пароль</strong><span className={newPassword.length >= 12 ? 'is-met' : ''}>{newPassword.length >= 12 ? <CheckCircleIcon size={17}/> : <span className="auth-requirement-dot"/>}Минимум 12 символов</span><span className={confirmation && newPassword === confirmation ? 'is-met' : ''}>{confirmation && newPassword === confirmation ? <CheckCircleIcon size={17}/> : <span className="auth-requirement-dot"/>}Одинаковый в обоих полях</span></div>
+  const met = passwordRequirements(newPassword)
+  const requirementItems: Array<[boolean, string]> = [
+    [met.length, `Минимум ${PASSWORD_MIN_LENGTH} символов`],
+    [met.digit, 'Хотя бы одна цифра'],
+    [met.special, 'Хотя бы один спецсимвол, например ! ? # %'],
+  ]
+
+  return <>
+    <div className="auth-requirements" aria-label="Требования к паролю"><strong>Новый пароль</strong>{requirementItems.map(([met, label]) => <span key={label} className={met ? 'is-met' : ''}>{met ? <CheckCircleIcon size={17}/> : <span className="auth-requirement-dot"/>}{label}</span>)}<span className={confirmation && newPassword === confirmation ? 'is-met' : ''}>{confirmation && newPassword === confirmation ? <CheckCircleIcon size={17}/> : <span className="auth-requirement-dot"/>}Одинаковый в обоих полях</span></div>
     <form className="auth-form" noValidate onSubmit={event => void submit(event)}>
-      <PasswordField id={currentId} label="Временный пароль" value={currentPassword} onChange={value => { setCurrentPassword(value); if (errors.currentPassword) setErrors(current => ({ ...current, currentPassword: '' })) }} autoComplete="current-password" error={errors.currentPassword} autoFocus/>
-      <PasswordField id={newId} label="Новый пароль" value={newPassword} onChange={value => { setNewPassword(value); if (errors.newPassword) setErrors(current => ({ ...current, newPassword: '' })) }} autoComplete="new-password" error={errors.newPassword}/>
+      {askCurrent&&<PasswordField id={currentId} label={onLogout ? "Временный пароль" : "Текущий пароль"} value={currentPassword} onChange={value => { setCurrentPassword(value); if (errors.currentPassword) setErrors(current => ({ ...current, currentPassword: '' })) }} autoComplete="current-password" error={errors.currentPassword} autoFocus/>}
+      <PasswordField key={askCurrent ? 'after-current' : 'first'} id={newId} label="Новый пароль" value={newPassword} onChange={value => { setNewPassword(value); if (errors.newPassword) setErrors(current => ({ ...current, newPassword: '' })) }} autoComplete="new-password" error={errors.newPassword} autoFocus={!askCurrent}/>
       <PasswordField id={confirmationId} label="Повторите новый пароль" value={confirmation} onChange={value => { setConfirmation(value); if (errors.confirmation) setErrors(current => ({ ...current, confirmation: '' })) }} autoComplete="new-password" error={errors.confirmation}/>
       <div className="auth-form-status" aria-live="polite">{formError ? <p className="auth-form-error" role="alert">{formError}</p> : null}</div>
       <button className="btn primary auth-submit" type="submit" disabled={pending}>{pending ? <><SpinnerGapIcon className="auth-spinner" size={18}/>Сохраняем…</> : 'Сохранить новый пароль'}</button>
-      <LogoutAction onLogout={onLogout} disabled={pending}/>
+      {onLogout&&<LogoutAction onLogout={onLogout} disabled={pending}/>}
     </form>
-  </AuthLayout>
+  </>
 }
 
 export function SessionLoadingScreen() {

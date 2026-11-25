@@ -3,6 +3,7 @@ export type UserRole = 'admin' | 'student'
 export type CurrentUser = {
   id: string
   login: string
+  display_name?: string
   role: UserRole
   is_owner: boolean
   must_change_password: boolean
@@ -32,7 +33,7 @@ export type SafeUser = CurrentUser & {
   deactivated_at: string | null
 }
 
-export type CuratorSummary = Pick<CurrentUser, 'id' | 'login' | 'role' | 'is_owner' | 'is_active'>
+export type CuratorSummary = Pick<CurrentUser, 'id' | 'login' | 'display_name' | 'role' | 'is_owner' | 'is_active'>
 
 export type TemporaryCredentialResponse = {
   user: SafeUser
@@ -152,7 +153,7 @@ export type StudentWriteFields = {
 }
 
 export type StudentCreateRequest = StudentWriteFields
-export type StudentUpdateRequest = Partial<StudentWriteFields> & { expected_version: number }
+export type StudentUpdateRequest = Partial<Omit<StudentWriteFields, 'links'>> & { expected_version: number; links?: Record<string, string | null> }
 
 export type StudentAccountResponse = { student_id: string; user: SafeUser }
 export type StudentTemporaryCredentialResponse = StudentAccountResponse & { temporary_password: string }
@@ -195,6 +196,7 @@ export type StrategyTaskRead = {
   description: string
   materials: string[]
   links: Record<string, string>
+  blocker: boolean
   period_text: string
   due_at: string | null
   position: number
@@ -212,6 +214,7 @@ export type StrategyTaskWrite = {
   description?: string
   materials?: string[]
   links?: Record<string, string>
+  blocker?: boolean
   period_text?: string
   due_at?: string | null
   position: number
@@ -391,3 +394,33 @@ export type KnowledgeImportResult = {
   library_status: KnowledgeLibraryStatus
   idempotent_replay: boolean
 }
+
+export type StrategyImportTask = {
+  title: string
+  description: string
+  period_text: string
+  materials: string[]
+  study_status: StrategyTaskRead['study_status']
+}
+
+export type StrategyImportSection = { title: string; tasks: StrategyImportTask[] }
+export type StrategyImportProfile = { point_a?: string | null; point_b?: string | null; telegram?: string | null }
+export type StrategyImportWarning = { code: string; count: number; examples: string[] }
+
+export type StrategyImportDraft = {
+  source_title: string
+  sha256: string
+  page_count: number
+  profile: StrategyImportProfile
+  sections: StrategyImportSection[]
+  warnings: StrategyImportWarning[]
+}
+
+export type StrategyImportApply = {
+  expected_version: number
+  source: { file_name: string; title: string; sha256: string }
+  profile: StrategyImportProfile
+  sections: StrategyImportSection[]
+}
+
+export type StrategyImportResult = { strategy: StrategyRead; student_version: number; section_count: number; task_count: number }

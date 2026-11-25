@@ -13,7 +13,10 @@ export const authApi = {
   logout(signal?: AbortSignal) {
     return apiRequest<void>(`${AUTH_BASE}/logout`, { method: 'POST', signal }, { notifyUnauthorized: false })
   },
+  updateMe(displayName: string, signal?: AbortSignal) {
+    return apiRequest<CurrentUser>(`${AUTH_BASE}/me`, { method: 'PATCH', body: { display_name: displayName }, signal })
+  },
   changePassword(payload: ChangePasswordRequest, signal?: AbortSignal) {
-    return apiRequest<void>(`${AUTH_BASE}/change-password`, { method: 'POST', body: payload, signal }, { notifyUnauthorized: false })
+    return apiRequest<CurrentUser>(`${AUTH_BASE}/change-password`, { method: 'POST', body: payload, signal }, { notifyUnauthorized: false })
   },
 }

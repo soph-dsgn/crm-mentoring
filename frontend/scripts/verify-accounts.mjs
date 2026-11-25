@@ -54,7 +54,7 @@ try {
   } finally {
     globalThis.fetch = originalFetch
   }
-  assert.deepEqual(JSON.parse(requests[0][1].body), { login: 'new.curator' })
+  assert.deepEqual(JSON.parse(requests[0][1].body), { login: 'new.curator', display_name: '' })
   assert.deepEqual(JSON.parse(requests[1][1].body), { successor_curator_id: 'curator-2' })
   assert.deepEqual(JSON.parse(requests[2][1].body), { curator_id: 'curator-2' })
   assert.match(requests[3][0], /curator_id=curator-1/)

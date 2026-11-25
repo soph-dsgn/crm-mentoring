@@ -9,6 +9,7 @@ export type AuthContextValue = {
   changePassword: (payload: ChangePasswordRequest) => Promise<void>
   refreshCurrentUser: () => Promise<void>
   retrySession: () => void
+  temporaryPasswordKnown: boolean
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

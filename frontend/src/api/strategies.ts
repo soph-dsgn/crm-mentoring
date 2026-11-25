@@ -1,5 +1,5 @@
 import { apiRequest } from './http'
-import type { ApprovalRead, ReorderItem, StrategyRead, StrategySectionRead, StrategyTaskRead, StrategyTaskUpdate, StrategyTaskWrite, TaskHistoryList } from './contracts'
+import type { ApprovalRead, ReorderItem, StrategyImportApply, StrategyImportDraft, StrategyImportResult, StrategyRead, StrategySectionRead, StrategyTaskRead, StrategyTaskUpdate, StrategyTaskWrite, TaskHistoryList } from './contracts'
 
 const encoded = (value: string) => encodeURIComponent(value)
 
@@ -10,6 +10,12 @@ export const strategiesApi = {
   createForStudent(studentId: string, signal?: AbortSignal) {
     return apiRequest<StrategyRead>(`/api/v1/students/${encoded(studentId)}/strategy`, { method: 'POST', body: {}, signal })
   },
+  previewImport(studentId: string, file: Blob, signal?: AbortSignal) {
+    return apiRequest<StrategyImportDraft>(`/api/v1/students/${encoded(studentId)}/strategy-import/preview`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' }, signal })
+  },
+  applyImport(studentId: string, payload: StrategyImportApply, signal?: AbortSignal) {
+    return apiRequest<StrategyImportResult>(`/api/v1/students/${encoded(studentId)}/strategy-import`, { method: 'POST', body: payload, signal })
+  },
   listSections(strategyId: string, signal?: AbortSignal) {
     return apiRequest<StrategySectionRead[]>(`/api/v1/strategies/${encoded(strategyId)}/sections`, { signal })
   },
@@ -18,6 +24,16 @@ export const strategiesApi = {
   },
   updateSection(sectionId: string, expectedVersion: number, title: string, signal?: AbortSignal) {
     return apiRequest<StrategySectionRead>(`/api/v1/strategy-sections/${encoded(sectionId)}`, { method: 'PATCH', body: { expected_version: expectedVersion, title }, signal })
+  },
+  removeSection(sectionId: string, expectedVersion: number) {
+    return apiRequest<void>(`/api/v1/strategy-sections/${encoded(sectionId)}/remove`, {
+      method: 'POST', body: { expected_version: expectedVersion },
+    })
+  },
+  moveTask(taskId: string, targetSectionId: string, expectedVersion: number) {
+    return apiRequest<StrategyTaskRead>(`/api/v1/strategy-tasks/${encoded(taskId)}/move`, {
+      method: 'POST', body: { target_section_id: targetSectionId, expected_version: expectedVersion },
+    })
   },
   reorderSections(strategyId: string, items: ReorderItem[], signal?: AbortSignal) {
     return apiRequest<StrategySectionRead[]>(`/api/v1/strategies/${encoded(strategyId)}/sections/reorder`, { method: 'POST', body: { items }, signal })
@@ -51,6 +67,20 @@ export const strategiesApi = {
     const params = new URLSearchParams({ limit: '100' })
     if (cursor) params.set('cursor', cursor)
     return apiRequest<TaskHistoryList>(`/api/v1/strategy-tasks/${encoded(taskId)}/history?${params}`, { signal })
+  },
+  async listApprovals(strategyId: string, signal?: AbortSignal) {
+    const items: ApprovalRead[] = []
+    let cursor: string | null = null
+    do {
+      const query = new URLSearchParams({ limit: '100' })
+      if (cursor) query.set('cursor', cursor)
+      const page: { items: ApprovalRead[]; next_cursor: string | null } = await apiRequest(
+        `/api/v1/strategies/${encoded(strategyId)}/approvals?${query}`, { signal },
+      )
+      items.push(...page.items)
+      cursor = page.next_cursor
+    } while (cursor)
+    return items
   },
   getApproval(taskId: string, signal?: AbortSignal) {
     return apiRequest<ApprovalRead>(`/api/v1/strategy-tasks/${encoded(taskId)}/approval`, { signal })

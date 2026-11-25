@@ -95,6 +95,13 @@ def create_app(
                 )
             return await call_next(request)
 
+    @application.middleware("http")
+    async def disable_api_caching(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     application.include_router(api_router)
     return application
 

@@ -11,7 +11,7 @@ from app.api.pagination import decode_cursor, encode_cursor
 from app.modules.auth.authorization import is_owner
 from app.modules.groups.models import Group, GroupStatus
 from app.modules.students.models import Student
-from app.modules.students.schemas import StudentCreate, StudentUpdate
+from app.modules.students.schemas import StudentCreate, StudentTransfer, StudentUpdate
 from app.modules.users.audit import AuditAction
 from app.modules.users.models import User
 from app.modules.users.service import ensure_admin, record_audit
@@ -103,8 +103,13 @@ def update_student(
 ) -> Student:
     values = payload.model_dump(exclude={"expected_version"}, exclude_unset=True)
     if "links" in values:
-        incoming = {key: str(value) for key, value in (payload.links or {}).items()}
-        values["links"] = {**student.links, **incoming}
+        links = dict(student.links)
+        for key, value in (payload.links or {}).items():
+            if value is None:
+                links.pop(key, None)
+            else:
+                links[key] = str(value)
+        values["links"] = links
     statement = update(Student).where(
         Student.id == student.id,
         Student.version == payload.expected_version,
@@ -121,6 +126,54 @@ def update_student(
         action=AuditAction.STUDENT_UPDATED,
         target_group_id=student.group_id,
         details={"student_id": student.id, "fields": sorted(values)},
+    )
+    return student
+
+
+def transfer_student(
+    database: Session,
+    actor: User,
+    student: Student,
+    payload: StudentTransfer,
+    now: datetime,
+) -> Student:
+    source_id = student.group_id
+    target_id = payload.target_group_id
+    if source_id == target_id:
+        raise _conflict("same_group", "Student is already in this group")
+    target = database.get(Group, target_id)
+    if target is None:
+        raise ApiError(404, "not_found", "Target group not found")
+    if not is_owner(actor) and target.curator_id != actor.id:
+        raise ApiError(403, "forbidden", "Operation not permitted")
+    # Lock both groups in the same order as a simultaneous reverse transfer.
+    for group_id in sorted((source_id, target_id)):
+        statement = update(Group).where(Group.id == group_id, Group.status != GroupStatus.ARCHIVED)
+        if not is_owner(actor):
+            statement = statement.where(Group.curator_id == actor.id)
+        result = database.execute(
+            statement.values(version=Group.version).execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            database.rollback()
+            raise _conflict("group_changed", "Group is archived or its curator assignment changed")
+    result = database.execute(
+        update(Student)
+        .where(
+            Student.id == student.id,
+            Student.group_id == source_id,
+            Student.version == payload.expected_version,
+        )
+        .values(group_id=target_id, version=Student.version + 1, updated_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    _refresh_or_conflict(database, student, result.rowcount)
+    record_audit(
+        database,
+        actor=actor,
+        action=AuditAction.STUDENT_TRANSFERRED,
+        target_group_id=target_id,
+        details={"student_id": student.id, "source_group_id": source_id},
     )
     return student
 

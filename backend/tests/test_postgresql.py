@@ -2,7 +2,7 @@ import os
 import subprocess
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from threading import Barrier
 from threading import Event as ThreadEvent
@@ -10,6 +10,7 @@ from threading import Event as ThreadEvent
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, func, inspect, select, text
 from sqlalchemy.engine import make_url
@@ -24,11 +25,21 @@ from app.db.session import build_engine, get_db
 from app.main import create_app
 from app.modules.auth.passwords import PasswordManager
 from app.modules.groups.models import Group, GroupStatus
-from app.modules.knowledge.models import KnowledgeLibraryState, KnowledgeLibraryStatus
+from app.modules.knowledge.import_service import import_knowledge, validate_import
+from app.modules.knowledge.models import (
+    KnowledgeDocument,
+    KnowledgeFavorite,
+    KnowledgeImportMapping,
+    KnowledgeImportRun,
+    KnowledgeLibraryState,
+    KnowledgeLibraryStatus,
+)
+from app.modules.knowledge.schemas import KnowledgeImportRequest
 from app.modules.legacy_io.models import ImportRun
 from app.modules.legacy_io.service import restore_backup
 from app.modules.strategies.models import StrategyTask
 from app.modules.students.models import Student
+from app.modules.users import service as user_service
 from app.modules.users.audit import AuditAction, AuditEvent
 from app.modules.users.models import User, UserRole
 from tests import test_groups_students_api as group_cases
@@ -185,7 +196,7 @@ def test_postgresql_upgrade_from_previous_head_preserves_existing_data() -> None
                 "Student"
             )
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "20261122_0011"
+                ScriptDirectory.from_config(config).get_current_head()
             )
     finally:
         engine.dispose()
@@ -235,6 +246,20 @@ def test_postgresql_operational_backup_and_restore_round_trip() -> None:
                 details={"synthetic": True},
             )
         )
+
+    with Session(engine) as database, database.begin():
+        active_owner = database.get(User, owner.id)
+        active_owner.must_change_password = False
+        payload = KnowledgeImportRequest(
+            source=knowledge_import_cases.knowledge_data(),
+            source_format="knowledge_data_v1",
+            mode="initial",
+        )
+        preview = validate_import(database, active_owner, payload)
+        confirmed = payload.model_copy(
+            update={"confirm": True, "confirmation_checksum": preview.checksum}
+        )
+        import_knowledge(database, active_owner, confirmed, datetime.now(UTC))
 
     source_url = make_url(POSTGRES_URL)
     restore_database = f"{source_url.database.removesuffix('_test')}_restore"
@@ -291,7 +316,13 @@ def test_postgresql_operational_backup_and_restore_round_trip() -> None:
         try:
             with Session(restored_engine) as database:
                 assert database.scalar(select(func.count(User.id))) == 1
-                assert database.scalar(select(func.count(AuditEvent.id))) == 1
+                assert database.scalar(select(func.count(AuditEvent.id))) == 3
+                assert (
+                    database.get(KnowledgeLibraryState, 1).status is KnowledgeLibraryStatus.ACTIVE
+                )
+                for model in (KnowledgeDocument, KnowledgeImportRun, KnowledgeImportMapping):
+                    assert database.scalar(select(func.count(model.id))) == 1
+                assert database.scalar(select(func.count(KnowledgeFavorite.document_id))) == 1
         finally:
             restored_engine.dispose()
     finally:
@@ -387,6 +418,63 @@ def test_postgresql_shared_task_review_is_serialized(
     postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
 ) -> None:
     homework_cases.test_concurrent_homeworks_cannot_review_the_same_task(postgresql_learning_api)
+
+
+def test_postgresql_concurrent_student_reactivation_issues_one_credential(
+    postgresql_learning_api: tuple[TestClient, sessionmaker[Session]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, factory = postgresql_learning_api
+    curator = homework_cases.add_user(client, factory, "curator")
+    learner = homework_cases.add_user(client, factory, "learner", role="student")
+    group = homework_cases.add_group(factory, curator)
+    student = homework_cases.add_student(factory, group, "Ученица", user=learner)
+    account_url = f"/api/v1/admin/students/{student.id}"
+    curator_headers = homework_cases.authenticate(client, curator.login)
+
+    with TestClient(client.app) as old_session, TestClient(client.app) as competing_client:
+        homework_cases.authenticate(old_session, learner.login)
+        competing_headers = homework_cases.authenticate(competing_client, curator.login)
+        assert client.post(f"{account_url}/deactivate-account", headers=curator_headers).is_success
+
+        both_read_inactive = Barrier(2)
+        generate_password = user_service.generate_temporary_password
+
+        def generate_after_both_reads() -> str:
+            both_read_inactive.wait(timeout=10)
+            return generate_password()
+
+        monkeypatch.setattr(user_service, "generate_temporary_password", generate_after_both_reads)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(
+                client.post, f"{account_url}/reactivate-account", headers=curator_headers
+            )
+            second = executor.submit(
+                competing_client.post,
+                f"{account_url}/reactivate-account",
+                headers=competing_headers,
+            )
+            winner, loser = sorted(
+                (first.result(), second.result()), key=lambda response: response.status_code
+            )
+
+        assert (winner.status_code, loser.status_code) == (200, 409)
+        assert loser.json()["error"]["code"] == "user_active"
+        assert old_session.get("/api/v1/auth/me").status_code == 401
+        with factory() as database:
+            account = database.get(User, learner.id)
+            assert account is not None and account.is_active and account.must_change_password
+            assert client.app.state.password_manager.verify(
+                winner.json()["temporary_password"], account.password_hash
+            )
+            audit_count = database.scalar(
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.target_user_id == account.id,
+                    AuditEvent.action == AuditAction.USER_REACTIVATED,
+                )
+            )
+            assert audit_count == 1
 
 
 def test_postgresql_legacy_import_is_concurrently_idempotent(

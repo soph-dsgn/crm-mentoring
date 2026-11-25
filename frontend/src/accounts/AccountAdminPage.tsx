@@ -19,11 +19,14 @@ import {
   canManageAccounts,
   temporaryCredentialReducer,
   type TemporaryCredential,
+  userInitial,
+  userLabel,
 } from './accountState'
 
 type LoadState = 'loading' | 'ready' | 'error'
 
 const toSummary = (user: SafeUser): CuratorSummary => ({
+  display_name: user.display_name,
   id: user.id,
   login: user.login,
   role: user.role,
@@ -65,12 +68,12 @@ export function TemporaryCredentialDialog({ credential, onClose }: { credential:
     {credential&&<div className="credential-content">
       <div><span>Логин</span><code>{credential.login}</code></div>
       <div><span>Временный пароль</span><code>{credential.temporaryPassword}</code></div>
-      {credential.entryUrl&&<div><span>Персональная ссылка</span><code>{credential.entryUrl}</code></div>}
+      {credential.entryUrl&&<div><span>Ссылка для входа</span><code>{credential.entryUrl}</code></div>}
       <p>Передайте данные безопасным способом. При первом входе потребуется создать новый пароль</p>
       {copyError&&<p className="dialog-error" role="alert">{copyError}</p>}
       <div className="dialog-actions">
         <button type="button" className="btn secondary" onClick={() => void copy()}>{copied?<Check size={16}/>:<Copy size={16}/>} {copied?'Скопировано':'Скопировать'}</button>
-        <button type="button" className="btn primary" onClick={onClose}>Я сохранила данные</button>
+        <button type="button" className="btn primary" onClick={onClose}>Данные сохранены</button>
       </div>
     </div>}
   </Dialog>
@@ -79,10 +82,11 @@ export function TemporaryCredentialDialog({ credential, onClose }: { credential:
 function CreateCuratorDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (response: TemporaryCredentialResponse) => void }) {
   const inputId = useId()
   const [login, setLogin] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [pending, setPending] = useState(false)
   const pendingRef = useRef(false)
   const [error, setError] = useState('')
-  useEffect(() => { if (open) { pendingRef.current=false; setLogin(''); setPending(false); setError('') } }, [open])
+  useEffect(() => { if (open) { pendingRef.current=false; setLogin(''); setDisplayName(''); setPending(false); setError('') } }, [open])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (pendingRef.current) return
@@ -90,7 +94,7 @@ function CreateCuratorDialog({ open, onClose, onCreated }: { open: boolean; onCl
     if (!normalized) { setError('Введите логин'); return }
     pendingRef.current=true; setPending(true); setError('')
     try {
-      onCreated(await usersApi.createCurator(normalized))
+      onCreated(await usersApi.createCurator(normalized, displayName.trim()))
       onClose()
     } catch (caught) {
       setError(accountErrorMessage(caught))
@@ -101,7 +105,8 @@ function CreateCuratorDialog({ open, onClose, onCreated }: { open: boolean; onCl
   }
   return <Dialog open={open} title="Новый куратор" description="Аккаунт получит временный пароль для первого входа" onClose={onClose} dismissible={!pending}>
     <form className="form" onSubmit={event => void submit(event)}>
-      <label className="field" htmlFor={inputId}><span>Логин</span><input id={inputId} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" value={login} onChange={event => setLogin(event.target.value)} placeholder="например, curator.name"/></label>
+      <label className="field"><span>Имя (необязательно)</span><input autoFocus maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="Например, Мария или Мария Иванова"/></label>
+      <label className="field" htmlFor={inputId}><span>Логин</span><input id={inputId} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" value={login} onChange={event => setLogin(event.target.value)} placeholder="например, curator.name"/></label>
       {error&&<p className="dialog-error" role="alert">{error}</p>}
       <div className="dialog-actions"><button type="button" className="btn secondary" disabled={pending} onClick={onClose}>Отмена</button><button type="submit" className="btn primary" disabled={pending}>{pending?'Создаём…':'Создать аккаунт'}</button></div>
     </form>
@@ -144,7 +149,7 @@ function OwnerAccountAdministration({ currentUser, onRefreshUser }: { currentUse
   const [detailVersion, setDetailVersion] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
   const [credential, dispatchCredential] = useReducer(temporaryCredentialReducer, null)
-  const [confirmAction, setConfirmAction] = useState<'deactivate' | 'transfer' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'deactivate' | 'transfer' | 'reset' | null>(null)
   const [offboardOpen, setOffboardOpen] = useState(false)
   const [reassignGroup, setReassignGroup] = useState<GroupSummary | null>(null)
 
@@ -186,11 +191,34 @@ function OwnerAccountAdministration({ currentUser, onRefreshUser }: { currentUse
     setDetail(user)
   }
   const activeSuccessors = curators.filter(curator => curator.is_active && curator.id !== detail?.id)
+  const [nameDraft, setNameDraft] = useState('')
+  const [namePending, setNamePending] = useState(false)
+  const [nameError, setNameError] = useState('')
+  useEffect(() => { setNameDraft(detail?.display_name ?? ''); setNameError('') }, [detail?.id, detail?.display_name])
+  const saveName = async () => {
+    if (!detail || namePending) return
+    setNamePending(true); setNameError('')
+    try {
+      updateCurator(await usersApi.renameCurator(detail.id, nameDraft.trim()))
+      if (detail.id === currentUser.id) await onRefreshUser()
+    } catch (caught) { setNameError(accountErrorMessage(caught)) }
+    finally { setNamePending(false) }
+  }
 
   const handleCreated = (response: TemporaryCredentialResponse) => {
     setCurators(current => [...current, toSummary(response.user)])
     setSelectedId(response.user.id)
-    dispatchCredential({ type: 'show', credential: { login: response.user.login, temporaryPassword: response.temporary_password } })
+    dispatchCredential({ type: 'show', credential: { login: response.user.login, temporaryPassword: response.temporary_password, entryUrl: window.location.origin + '/' } })
+  }
+
+  const resetPassword = async () => {
+    if (!detail) return
+    const result = await usersApi.resetPassword(detail.id)
+    updateCurator({ ...detail, must_change_password: result.must_change_password })
+    dispatchCredential({
+      type: 'show',
+      credential: { login: detail.login, temporaryPassword: result.temporary_password, entryUrl: window.location.origin + '/' },
+    })
   }
 
   const deactivate = async () => {
@@ -224,14 +252,15 @@ function OwnerAccountAdministration({ currentUser, onRefreshUser }: { currentUse
     {listState==='error'&&<div className="account-state account-state-error" role="alert"><strong>Не удалось загрузить аккаунты</strong><p>{listError}</p><button className="btn secondary" onClick={() => void loadCurators()}><ArrowClockwise size={16}/> Повторить</button></div>}
     {listState==='ready'&&!curators.length&&<div className="profile-empty"><UsersThree size={30}/><strong>Аккаунтов кураторов пока нет</strong><p>Создайте первый аккаунт, чтобы назначить ответственного за группы</p></div>}
     {listState==='ready'&&curators.length>0&&<div className="account-layout">
-      <aside className="account-list" aria-label="Кураторы">{curators.map(curator=><button key={curator.id} className={selectedId===curator.id?'selected':''} aria-current={selectedId===curator.id?'true':undefined} onClick={() => setSelectedId(curator.id)}><span className="account-avatar">{curator.login.slice(0,1).toUpperCase()}</span><span><strong>{curator.login}</strong><small>{curator.is_owner?'Владелец':curator.is_active?'Куратор':'Доступ закрыт'}</small></span>{curator.is_owner&&<Crown size={15}/>}<i className={`account-status ${curator.is_active?'active':'inactive'}`} aria-label={curator.is_active?'Активен':'Неактивен'}/></button>)}</aside>
+      <aside className="account-list" aria-label="Кураторы">{curators.map(curator=><button key={curator.id} className={selectedId===curator.id?'selected':''} aria-current={selectedId===curator.id?'true':undefined} onClick={() => setSelectedId(curator.id)}><span className="account-avatar">{userInitial(curator)}</span><span><strong>{userLabel(curator)}</strong><small>{curator.display_name?`${curator.login} · `:''}{curator.is_owner?'Владелец':curator.is_active?'Куратор':'Доступ закрыт'}</small></span>{curator.is_owner&&<Crown size={15}/>}<i className={`account-status ${curator.is_active?'active':'inactive'}`} aria-label={curator.is_active?'Активен':'Неактивен'}/></button>)}</aside>
       <section className="account-detail" aria-live="polite">
         {detailState==='loading'&&<div className="account-state" role="status"><span className="account-spinner"/>Загружаем данные…</div>}
         {detailState==='error'&&<div className="account-state account-state-error" role="alert"><strong>Не удалось открыть аккаунт</strong><p>{detailError}</p><button className="btn secondary" onClick={refreshDetail}><ArrowClockwise size={16}/> Повторить</button></div>}
         {detailState==='ready'&&detail&&<>
-          <div className="account-detail-head"><div><span className="account-detail-avatar">{detail.login.slice(0,1).toUpperCase()}</span><div><div className="account-detail-badges"><span className={`pill ${detail.is_active?'':'account-inactive'}`}>{detail.is_active?'Активен':'Неактивен'}</span>{detail.is_owner&&<span className="pill owner">Владелец</span>}{detail.must_change_password&&<span className="pill light">Ожидает смены пароля</span>}</div><h2>{detail.login}</h2><p>Создан {formatDate(detail.created_at)}{detail.deactivated_at?` · доступ закрыт ${formatDate(detail.deactivated_at)}`:''}</p></div></div>
-            {detail.is_active&&detail.id!==currentUser.id&&<div className="account-detail-actions">{groups.length===0?<button className="btn danger" onClick={() => setConfirmAction('deactivate')}>Деактивировать</button>:<button className="btn secondary" onClick={() => setOffboardOpen(true)}><ArrowsLeftRight size={16}/> Передать группы и отключить</button>}{!detail.is_owner&&<button className="btn dark" onClick={() => setConfirmAction('transfer')}><Crown size={16}/> Передать права владельца</button>}</div>}
+          <div className="account-detail-head"><div><span className="account-detail-avatar">{userInitial(detail)}</span><div><div className="account-detail-badges"><span className={`pill ${detail.is_active?'':'account-inactive'}`}>{detail.is_active?'Активен':'Неактивен'}</span>{detail.is_owner&&<span className="pill owner">Владелец</span>}{detail.must_change_password&&<span className="pill light">Ожидает смены пароля</span>}</div><h2>{userLabel(detail)}</h2><p>Логин {detail.login} · создан {formatDate(detail.created_at)}{detail.deactivated_at?` · доступ закрыт ${formatDate(detail.deactivated_at)}`:''}</p></div></div>
+            {detail.is_active&&detail.id!==currentUser.id&&<div className="account-detail-actions"><button className="btn secondary" onClick={() => setConfirmAction('reset')}>Новый временный пароль</button>{groups.length===0?<button className="btn danger" onClick={() => setConfirmAction('deactivate')}>Деактивировать</button>:<button className="btn secondary" onClick={() => setOffboardOpen(true)}><ArrowsLeftRight size={16}/> Передать группы и отключить</button>}{!detail.is_owner&&<button className="btn dark" onClick={() => setConfirmAction('transfer')}><Crown size={16}/> Передать права владельца</button>}</div>}
           </div>
+          <form className="account-name-form" onSubmit={event => { event.preventDefault(); void saveName() }}><label className="field"><span>Имя</span><input maxLength={120} value={nameDraft} onChange={event => setNameDraft(event.target.value)} placeholder="Имя или имя и фамилия"/></label><button className="btn secondary" disabled={namePending||nameDraft.trim()===(detail.display_name??'')}>{namePending?'Сохраняем…':'Сохранить имя'}</button>{nameError&&<p className="dialog-error" role="alert">{nameError}</p>}</form>
           <div className="account-facts"><div><span>Роль</span><strong>{detail.is_owner?'Владелец':'Куратор'}</strong></div><div><span>Группы</span><strong>{groups.length}</strong></div><div><span>Доступ</span><strong>{detail.is_active?'Разрешён':'Закрыт'}</strong></div></div>
           <div className="account-groups-head"><div><h3>Назначенные группы</h3><p>Передача меняет ответственного на сервере и не затрагивает учебную историю</p></div></div>
           {groups.length?<div className="account-groups">{groups.map(group=><div key={group.id}><span><strong>{group.name}</strong><small>{group.status==='active'?'Активная':group.status==='backlog'?'Бэклог':group.status==='completed'?'Завершена':'В архиве'}</small></span>{detail.is_active&&activeSuccessors.length>0&&<button className="btn secondary" onClick={() => setReassignGroup(group)}>Передать</button>}</div>)}</div>:<div className="account-empty-groups"><UsersThree size={25}/><strong>Назначенных групп нет</strong><p>Куратор может получить группу при создании или передаче</p></div>}
@@ -240,6 +269,7 @@ function OwnerAccountAdministration({ currentUser, onRefreshUser }: { currentUse
     </div>}
     <CreateCuratorDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={handleCreated}/>
     <TemporaryCredentialDialog credential={credential} onClose={() => dispatchCredential({ type: 'dismiss' })}/>
+    <ConfirmDialog open={confirmAction==='reset'} title="Выдать новый временный пароль?" description="Активные сессии куратора завершатся. При следующем входе потребуется сменить пароль" confirmLabel="Выдать пароль" getErrorMessage={accountErrorMessage} onConfirm={resetPassword} onClose={() => setConfirmAction(null)}/>
     <ConfirmDialog open={confirmAction==='deactivate'} title="Деактивировать куратора?" description={`Аккаунт ${detail?.login??''} потеряет доступ, а активные сессии будут завершены`} confirmLabel="Деактивировать" danger getErrorMessage={accountErrorMessage} onConfirm={deactivate} onClose={() => setConfirmAction(null)}/>
     <ConfirmDialog open={confirmAction==='transfer'} title="Передать права владельца?" description={`${detail?.login??'Выбранный куратор'} получит полный доступ. Ваш аккаунт останется активным куратором без owner-действий`} confirmLabel="Передать права" getErrorMessage={accountErrorMessage} onConfirm={transferOwnership} onClose={() => setConfirmAction(null)}/>
     <CuratorSelectionDialog open={offboardOpen} title="Передать группы и отключить" description={`Все группы куратора ${detail?.login??''} перейдут выбранному куратору, затем аккаунт будет деактивирован`} confirmLabel="Передать и отключить" curators={activeSuccessors} onClose={() => setOffboardOpen(false)} onConfirm={offboard}/>

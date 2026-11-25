@@ -1,0 +1,17 @@
+# Включите в существующий HTTPS server для единого hostname Кураторской.
+# Замените CRM_API_PORT и CRM_WEB_PORT на согласованные loopback-порты.
+client_max_body_size 11m;
+proxy_set_header Host $http_host;
+proxy_set_header Forwarded "";
+proxy_set_header X-Forwarded-For "";
+proxy_set_header X-Forwarded-Host "";
+proxy_set_header X-Forwarded-Proto "";
+
+location = /api { return 404; }
+location ^~ /api/ {
+    proxy_pass http://127.0.0.1:CRM_API_PORT;
+    proxy_cache off;
+}
+location = /health/live { proxy_pass http://127.0.0.1:CRM_API_PORT; }
+location = /health/ready { proxy_pass http://127.0.0.1:CRM_API_PORT; }
+location / { proxy_pass http://127.0.0.1:CRM_WEB_PORT; }

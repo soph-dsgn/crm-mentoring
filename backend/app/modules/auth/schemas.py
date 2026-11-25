@@ -10,12 +10,13 @@ class LoginRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=1024)
-    new_password: str = Field(min_length=12, max_length=1024)
+    new_password: str = Field(min_length=1, max_length=1024)
 
 
 class CurrentUserResponse(BaseModel):
     id: str
     login: str
+    display_name: str
     role: UserRole
     is_owner: bool
     must_change_password: bool

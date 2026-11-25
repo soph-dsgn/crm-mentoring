@@ -24,7 +24,7 @@ systemctl --no-pager --full status postgresql
 До deployment оператор должен явно выбрать:
 
 - два свободных loopback-порта для API и static frontend;
-- два DNS hostname либо согласованную routing-схему;
+- один HTTPS hostname для UI и API, действующий сертификат и маршрутизацию `/api/` и health;
 - существующий reverse proxy и точный proxy peer;
 - отдельные PostgreSQL database/role и допустимый private путь от Docker bridge к host PostgreSQL;
 - каталог env-файла с правами `0600`;

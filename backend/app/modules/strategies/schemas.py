@@ -68,6 +68,7 @@ class TaskCreate(StrictModel):
     description: LongText = ""
     materials: list[ShortText] = Field(default_factory=list, max_length=100)
     links: dict[ShortText, HttpUrl] = Field(default_factory=dict, max_length=50)
+    blocker: bool = False
     period_text: ShortText = ""
     due_at: datetime | None = None
     position: int = Field(ge=0, le=10_000)
@@ -79,12 +80,13 @@ class TaskUpdate(StrictModel):
     description: LongText | None = None
     materials: list[ShortText] | None = Field(default=None, max_length=100)
     links: dict[ShortText, HttpUrl] | None = Field(default=None, max_length=50)
+    blocker: bool | None = None
     period_text: ShortText | None = None
     due_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_mutation(self) -> TaskUpdate:
-        non_nullable = {"title", "description", "materials", "links", "period_text"}
+        non_nullable = {"title", "description", "materials", "links", "period_text", "blocker"}
         if any(getattr(self, field) is None for field in non_nullable & self.model_fields_set):
             raise ValueError("Non-nullable task fields cannot be null")
         if self.model_fields_set == {"expected_version"}:
@@ -101,6 +103,10 @@ class VersionRequest(StrictModel):
     expected_version: int = Field(ge=1)
 
 
+class TaskMove(VersionRequest):
+    target_section_id: str = Field(min_length=1, max_length=36)
+
+
 class TaskRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -111,6 +117,7 @@ class TaskRead(BaseModel):
     description: str
     materials: list[str]
     links: dict[str, str]
+    blocker: bool
     period_text: str
     due_at: datetime | None
     position: int
@@ -173,3 +180,68 @@ class ApprovalRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     version: int
+
+
+class ApprovalList(BaseModel):
+    items: list[ApprovalRead]
+    next_cursor: str | None
+
+
+class ImportedTask(StrictModel):
+    title: Title
+    description: LongText = ""
+    period_text: ShortText = ""
+    materials: list[ShortText] = Field(default_factory=list, max_length=100)
+    study_status: StudyStatus = StudyStatus.NOT_STARTED
+
+
+class ImportedSection(StrictModel):
+    title: Title
+    tasks: list[ImportedTask] = Field(min_length=1, max_length=500)
+
+
+class ImportedProfile(StrictModel):
+    point_a: LongText | None = None
+    point_b: LongText | None = None
+    telegram: HttpUrl | None = None
+
+
+class ImportWarning(BaseModel):
+    code: str
+    count: int
+    examples: list[str] = Field(default_factory=list)
+
+
+class StrategyImportDraft(BaseModel):
+    source_title: str
+    sha256: str
+    page_count: int
+    profile: ImportedProfile
+    sections: list[ImportedSection]
+    warnings: list[ImportWarning]
+
+
+class ImportSource(StrictModel):
+    file_name: ShortText = ""
+    title: ShortText = ""
+    sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
+class StrategyImportApply(StrictModel):
+    expected_version: int = Field(ge=1)
+    source: ImportSource
+    profile: ImportedProfile = Field(default_factory=ImportedProfile)
+    sections: list[ImportedSection] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_size(self) -> StrategyImportApply:
+        if sum(len(section.tasks) for section in self.sections) > 2000:
+            raise ValueError("Too many tasks in one import")
+        return self
+
+
+class StrategyImportResult(BaseModel):
+    strategy: StrategyRead
+    student_version: int
+    section_count: int
+    task_count: int

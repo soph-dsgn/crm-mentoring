@@ -6,6 +6,4 @@
 отдельное подтверждение каждой production-мутации, verification и rollback. Не выполняйте
 автономный restore, downgrade, broad Docker cleanup и не затрагивайте несвязанные сервисы.
 
-Для frontend-интеграции начните с `SOFIA_HANDOFF.md` и `docs/frontend-handoff/README.md`. Они
-содержат проверенные API/RBAC-контракты, roadmap, открытые backend gaps и правила cutover; перед
-реализацией всё равно сверяйте их с актуальными routes, schemas и tests.
+Для текущего запуска и приёмки используйте `README.md` и `docs/release/FINAL_ACCEPTANCE.md`. Контракты сверяйте с актуальными routes, schemas и tests.

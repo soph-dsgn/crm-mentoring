@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes._shared import (
@@ -16,6 +16,7 @@ from app.api.routes._shared import (
 from app.modules.auth.dependencies import request_now
 from app.modules.strategies.schemas import (
     ApprovalCreate,
+    ApprovalList,
     ApprovalRead,
     ApprovalTransition,
     HistoryList,
@@ -29,6 +30,7 @@ from app.modules.strategies.schemas import (
     StrategyCreate,
     StrategyRead,
     TaskCreate,
+    TaskMove,
     TaskRead,
     TaskStatusChange,
     TaskUpdate,
@@ -46,9 +48,12 @@ from app.modules.strategies.service import (
     get_strategy_for_student,
     get_student_for_strategy,
     get_task,
+    list_approvals,
     list_history,
     list_sections,
     list_tasks,
+    move_task,
+    remove_section,
     reorder_sections,
     reorder_tasks,
     set_task_archived,
@@ -57,6 +62,7 @@ from app.modules.strategies.service import (
     update_task,
 )
 from app.modules.users.models import UserRole
+from app.modules.users.service import ensure_admin
 
 router = APIRouter(prefix="/api/v1", tags=["strategies"])
 
@@ -140,6 +146,35 @@ def update_section_endpoint(
     result = update_section(database, context.user, section, payload, request_now(request))
     commit(database)
     return result
+
+
+@router.post("/strategy-sections/{section_id}/remove", status_code=204)
+def remove_section_endpoint(
+    section_id: str,
+    payload: VersionRequest,
+    database: Database,
+    context: MutationContext,
+    _: SameOrigin,
+) -> Response:
+    section = get_section(database, context.user, section_id, write=True)
+    remove_section(database, context.user, section, payload.expected_version)
+    commit(database)
+    return Response(status_code=204)
+
+
+@router.post("/strategy-tasks/{task_id}/move", response_model=TaskRead)
+def move_task_endpoint(
+    task_id: str,
+    payload: TaskMove,
+    request: Request,
+    database: Database,
+    context: MutationContext,
+    _: SameOrigin,
+) -> TaskRead:
+    task = get_task(database, context.user, task_id, write=True)
+    result = move_task(database, context.user, task, payload, request_now(request))
+    commit(database)
+    return TaskRead.model_validate(result)
 
 
 @router.post("/strategies/{strategy_id}/sections/reorder", response_model=list[SectionRead])
@@ -317,12 +352,30 @@ def list_task_history_endpoint(
     )
 
 
+@router.get("/strategies/{strategy_id}/approvals", response_model=ApprovalList)
+def list_approvals_endpoint(
+    strategy_id: str,
+    database: Database,
+    context: QueryContext,
+    cursor: Annotated[str | None, Query(max_length=100)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> ApprovalList:
+    ensure_admin(context.user)
+    strategy = get_strategy(database, context.user, strategy_id, write=False)
+    items, next_cursor = list_approvals(database, strategy, cursor=cursor, limit=limit)
+    database.commit()
+    return ApprovalList(
+        items=[ApprovalRead.model_validate(item) for item in items], next_cursor=next_cursor
+    )
+
+
 @router.get("/strategy-tasks/{task_id}/approval", response_model=ApprovalRead)
 def get_approval_endpoint(
     task_id: str,
     database: Database,
     context: QueryContext,
 ):
+    ensure_admin(context.user)
     task = get_task(database, context.user, task_id, write=False)
     approval = get_approval(database, task)
     database.commit()

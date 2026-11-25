@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.modules.users.models import UserRole
+
+DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)]
 
 
 class LoginAccountRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     login: str = Field(min_length=1, max_length=255)
+    display_name: DisplayName = ""
+
+
+class DisplayNameUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: DisplayName
 
 
 class ReassignCuratorRequest(BaseModel):
@@ -30,6 +40,7 @@ class SafeUserResponse(BaseModel):
 
     id: str
     login: str
+    display_name: str
     role: UserRole
     is_owner: bool
     is_active: bool
@@ -43,6 +54,7 @@ class CuratorPublicResponse(BaseModel):
 
     id: str
     login: str
+    display_name: str
     role: UserRole
     is_owner: bool
     is_active: bool

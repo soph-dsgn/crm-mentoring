@@ -12,8 +12,8 @@ firewall, секретами и backup описана в [`docs/deployment/`](..
    KURATORSKAYA_ENVIRONMENT=production
    KURATORSKAYA_DEBUG=false
    KURATORSKAYA_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
-   KURATORSKAYA_PERMITTED_HOSTS=["api.example.com"]
-   KURATORSKAYA_FRONTEND_ORIGINS=["https://app.example.com"]
+   KURATORSKAYA_PERMITTED_HOSTS=["CRM_HOSTNAME","127.0.0.1"]
+   KURATORSKAYA_FRONTEND_ORIGINS=["https://CRM_HOSTNAME"]
    KURATORSKAYA_TRUSTED_PROXY_IPS=[]
    ```
 

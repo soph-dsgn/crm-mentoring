@@ -11,6 +11,7 @@ import type { CurrentUser, CuratorSummary, LegacyImportResult, LegacyValidationR
 import { ApiError } from '../api/http'
 import { legacyApi } from '../api/legacy'
 import { usersApi } from '../api/users'
+import { STORAGE_KEY } from '../data'
 import Select from '../Select'
 import {
   MAX_LEGACY_IMPORT_BYTES,
@@ -18,7 +19,6 @@ import {
   groupConflicts,
   legacyGroups,
   legacySource,
-  markServerCutover,
   migrationErrorMessage,
   requestBytes,
   warningLabel,
@@ -98,28 +98,33 @@ export default function MigrationPage({ currentUser, onCutover }: { currentUser:
     setReport(null); setResult(null); setConfirmed(false); setError(''); setFlow(nextFlow)
   }
 
-  const chooseFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
+  const loadText = (text: string, name: string) => {
     setError(''); setReport(null); setResult(null); setConfirmed(false)
-    if (file.size > MAX_LEGACY_IMPORT_BYTES) {
-      setSource(null); setGroups([]); setAssignments({}); setFlow('idle')
-      setError('Файл превышает допустимые 5 МиБ')
-      return
-    }
     try {
-      const text = await file.text()
       if (new TextEncoder().encode(text).byteLength > MAX_LEGACY_IMPORT_BYTES) throw new Error('too_large')
       const parsed = legacySource(JSON.parse(text))
       if (!parsed) throw new Error('invalid_source')
       const nextGroups = legacyGroups(parsed)
-      setSource(parsed); setSourceName(file.name); setGroups(nextGroups); setAssignments({}); setFlow('ready')
+      setSource(parsed); setSourceName(name); setGroups(nextGroups); setAssignments({}); setFlow('ready')
     } catch {
       setSource(null); setSourceName(''); setGroups([]); setAssignments({}); setFlow('idle')
       setError('Не удалось прочитать JSON-копию AppData. Локальные данные не изменены')
     }
   }
+
+  const chooseFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > MAX_LEGACY_IMPORT_BYTES) {
+      setSource(null); setGroups([]); setAssignments({}); setFlow('idle'); setReport(null); setResult(null); setConfirmed(false)
+      setError('Файл превышает допустимые 5 МиБ')
+      return
+    }
+    loadText(await file.text(), file.name)
+  }
+
+  const browserCopy = (() => { try { return localStorage.getItem(STORAGE_KEY) } catch { return null } })()
 
   const changeAssignment = (groupId: string, curatorId: string) => {
     setAssignments(current => ({ ...current, [groupId]: curatorId }))
@@ -151,7 +156,7 @@ export default function MigrationPage({ currentUser, onCutover }: { currentUser:
       const next = await legacyApi.importLegacy({
         source, curator_assignments: assignments, confirmation_checksum: report.checksum, confirm: true,
       })
-      markServerCutover(); setResult(next); setFlow('complete'); setConfirmed(false)
+      setResult(next); setFlow('complete'); setConfirmed(false)
       await onCutover()
     } catch (caught) {
       setConfirmed(false)
@@ -189,6 +194,7 @@ export default function MigrationPage({ currentUser, onCutover }: { currentUser:
       <div className="migration-step"><span>1</span><div><h2 id={`${inputId}-source`}>Выберите локальную копию</h2><p>Поддерживаются AppData v1–v3, не более 5 МиБ. Файл не изменяется и не импортируется автоматически</p></div></div>
       <div className="migration-file-row">
         <button className="btn primary" disabled={flow==='validating'||flow==='importing'} onClick={() => fileInput.current?.click()}><FileArrowUp size={17}/> Выбрать JSON-файл</button>
+        {browserCopy&&<button className="btn secondary" disabled={flow==='validating'||flow==='importing'} onClick={() => loadText(browserCopy, 'Копия из этого браузера')}><ShieldCheck size={17}/> Взять копию из этого браузера</button>}
         <span>{sourceName || 'Файл не выбран'}</span>
         <input ref={fileInput} id={inputId} type="file" accept="application/json,.json" disabled={flow==='validating'||flow==='importing'} hidden onChange={event => void chooseFile(event)}/>
       </div>
@@ -219,7 +225,7 @@ export default function MigrationPage({ currentUser, onCutover }: { currentUser:
       {conflicts.length>0&&<div className="migration-conflicts" role="alert"><h3>Конфликты и неподдерживаемые записи</h3><ul>{conflicts.map(conflict=><li key={`${conflict.code}:${conflict.entity}`}>{conflictLabel(conflict)}</li>)}</ul></div>}
       {report.warnings.length>0&&<div className="migration-warnings"><h3>Ограничения</h3><ul>{report.warnings.map((warning,index)=><li key={index}>{warningLabel(warning)}</li>)}</ul></div>}
       {report.valid&&<div className="migration-confirmation">
-        <label><input type="checkbox" checked={confirmed} disabled={flow==='importing'} onChange={event => setConfirmed(event.target.checked)}/><span>Я сверила количество записей, связи и назначения кураторов. Понимаю, что следующий шаг запишет данные на сервер</span></label>
+        <label><input type="checkbox" checked={confirmed} disabled={flow==='importing'} onChange={event => setConfirmed(event.target.checked)}/><span>Количество записей, связи и назначения кураторов сверены. Следующий шаг запишет данные на сервер</span></label>
         <button className="btn primary" disabled={!confirmed||flow==='importing'} onClick={() => void importData()}>{flow==='importing'?<span className="account-spinner"/>:<FileArrowUp size={17}/>} {flow==='importing'?'Импортируем…':'Импортировать на сервер'}</button>
       </div>}
     </section>}

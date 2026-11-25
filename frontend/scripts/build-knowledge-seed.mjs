@@ -94,7 +94,7 @@ const chapters = textbookGroups.map((group, index) => {
 })
 
 const seed = { version: 1, source, prompts, chapters, importedAt: now }
-await fs.writeFile('public/knowledge-seed.json', JSON.stringify(seed))
+await fs.writeFile('../migration-sources/knowledge-seed.json', JSON.stringify(seed))
 console.log(JSON.stringify({
   prompts: prompts.length, chapters: chapters.length,
   promptChars: prompts.reduce((n, x) => n + x.text.length, 0),

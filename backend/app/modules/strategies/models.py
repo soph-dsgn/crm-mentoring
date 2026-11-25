@@ -6,6 +6,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -149,6 +151,9 @@ class StrategyTask(Base):
     )
     period_text: Mapped[str] = mapped_column(
         String(255), nullable=False, default="", server_default=""
+    )
+    blocker: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     position: Mapped[int] = mapped_column(Integer, nullable=False)

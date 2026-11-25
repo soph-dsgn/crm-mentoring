@@ -76,8 +76,13 @@ try {
   assert.equal(state.authReducer(state.initialAuthState, { type: 'BOOTSTRAP_ERROR', message: 'Нет соединения' }).status, 'error')
 
   assert.deepEqual(validation.validateLogin('', ''), { login: 'Введите логин', password: 'Введите пароль' })
-  assert.deepEqual(validation.validatePasswordChange('temporary', 'short', 'different'), { newPassword: 'Минимум 12 символов', confirmation: 'Пароли не совпадают' })
-  assert.deepEqual(validation.validatePasswordChange('temporary', 'long password value', 'long password value'), {})
+  assert.deepEqual(validation.validatePasswordChange('temporary', 'short', 'different'), { newPassword: 'Минимум 8 символов', confirmation: 'Пароли не совпадают' })
+  assert.deepEqual(validation.validatePasswordChange('temporary', 'longpassword', 'longpassword'), { newPassword: 'Добавьте цифру и спецсимвол' })
+  assert.deepEqual(validation.validatePasswordChange('temporary', 'password1', 'password1'), { newPassword: 'Добавьте спецсимвол, например ! ? # %' })
+  assert.deepEqual(validation.validatePasswordChange('temporary', 'password!', 'password!'), { newPassword: 'Добавьте хотя бы одну цифру' })
+  const knownMarkup = renderToStaticMarkup(React.createElement(screens.ChangePasswordScreen, { login: 'curator', onSubmit: async () => {}, onLogout: async () => {}, currentKnown: true }))
+  assert.doesNotMatch(knownMarkup, /Временный пароль/)
+  assert.deepEqual(validation.validatePasswordChange('temporary', 'pass12!x', 'pass12!x'), {})
 
   const noop = async () => {}
   const loginMarkup = renderToStaticMarkup(React.createElement(screens.LoginScreen, { reason: 'expired', notice: null, onSubmit: noop }))
@@ -89,7 +94,7 @@ try {
 
   const changeMarkup = renderToStaticMarkup(React.createElement(screens.ChangePasswordScreen, { login: 'curator', onSubmit: noop, onLogout: noop }))
   assert.match(changeMarkup, /Создайте новый пароль/)
-  assert.match(changeMarkup, /Минимум 12 символов/)
+  assert.match(changeMarkup, /Минимум 8 символов/)
   assert.match(changeMarkup, /autoComplete="new-password"/)
   assert.match(changeMarkup, /Выйти/)
 

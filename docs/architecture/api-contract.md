@@ -25,7 +25,7 @@
 | POST | `/api/v1/auth/login` | создать серверную сессию, реализован |
 | POST | `/api/v1/auth/logout` | отозвать текущую сессию, реализован |
 | GET | `/api/v1/auth/me` | текущий пользователь, реализован |
-| POST | `/api/v1/auth/change-password` | обязательная/обычная смена пароля, реализован |
+| POST | `/api/v1/auth/change-password` | смена пароля: минимум 8 символов, цифра и спецсимвол. Отзывает все сессии пользователя и выдаёт новую текущему браузеру, возвращает `CurrentUser` |
 
 Endpoint readiness с проверкой БД следует добавить отдельно (`/ready`), чтобы liveness не зависел от временной ошибки БД.
 
@@ -74,15 +74,21 @@ Update schemas запрещают лишние поля; `curator_id`, `group_id
 cursor. Групповой список учениц доступен только admin; student использует собственный
 `GET /students/{student_id}`. В student-ответах скрыты личные заметки и внутренний curator ID.
 
+Перенос ученицы выполняется `POST /api/v1/students/{id}/transfer` с `target_group_id` и `expected_version`. Обе группы должны быть вне архива. У куратора должны быть права на обе группы. Владелец может выполнить межкураторский перенос. Меняется связь существующего профиля с группой, версия профиля и аудит. В частичном PATCH профиля отдельную ссылку удаляет значение `null` внутри объекта `links`.
+
 ## Strategies и homeworks
 
 | Метод | Путь | Назначение |
 |---|---|---|
 | GET | `/api/v1/students/{id}/strategy` | единственная стратегия ученика |
 | POST | `/api/v1/students/{id}/strategy` | создать стратегию ученика |
+| POST | `/api/v1/students/{id}/strategy-import/preview` | тело `application/pdf` (до 10 МБ, до 80 страниц) — разбор PDF-экспорта Notion без записи: разделы, задачи со статусами, Точка А/Б, Telegram, предупреждения |
+| POST | `/api/v1/students/{id}/strategy-import` | записать подтверждённый черновик в пустую стратегию и выбранные поля профиля; `expected_version` профиля, `409 strategy_not_empty` для непустой стратегии |
 | GET/POST | `/api/v1/strategies/{id}/sections` | список / добавить раздел |
 | POST | `/api/v1/strategies/{id}/sections/reorder` | атомарно изменить порядок всех разделов |
 | PATCH | `/api/v1/strategy-sections/{id}` | переименовать раздел по `expected_version` |
+| POST | `/api/v1/strategy-sections/{id}/remove` | удалить пустой раздел по `expected_version`, ответ 204 |
+| POST | `/api/v1/strategy-tasks/{id}/move` | переместить задачу по `expected_version` и `target_section_id` внутри стратегии |
 | GET/POST | `/api/v1/strategy-sections/{id}/tasks` | список / добавить задачу |
 | POST | `/api/v1/strategy-sections/{id}/tasks/reorder` | атомарно изменить порядок всех задач раздела |
 | GET/PATCH | `/api/v1/strategy-tasks/{id}` | читать / редактировать задачу |
@@ -90,7 +96,8 @@ cursor. Групповой список учениц доступен тольк
 | POST | `/api/v1/strategy-tasks/{id}/archive` | архивировать задачу без удаления |
 | POST | `/api/v1/strategy-tasks/{id}/restore` | восстановить архивную задачу |
 | GET | `/api/v1/strategy-tasks/{id}/history` | append-only история задачи |
-| GET/POST | `/api/v1/strategy-tasks/{id}/approval` | прочитать / создать согласование с Аней |
+| GET | `/api/v1/strategies/{id}/approvals` | постраничный список согласований для кураторов |
+| GET/POST | `/api/v1/strategy-tasks/{id}/approval` | прочитать / создать внутреннее согласование с Аней |
 | POST | `/api/v1/strategy-tasks/{id}/approval/transition` | валидируемая команда согласования |
 | GET/POST | `/api/v1/strategies/{id}/homeworks` | история / черновик из выбранных задач |
 | GET/PATCH | `/api/v1/homeworks/{id}` | карточка / допустимые поля текущего состояния |
@@ -105,6 +112,8 @@ cursor. Групповой список учениц доступен тольк
 но не дублирует полные тексты комментариев. Student читает только собственные встречи и ДЗ,
 может отметить работу в процессе и отправить её; выдача, возврат и принятие доступны только
 назначенному admin или owner. Только принятие завершает связанные задачи.
+
+Перемещение сохраняет идентичность и снимки задачи, добавляет запись в историю и запрещено во время проверки ДЗ. Архивные задачи и соответствия исходного импорта удерживают раздел от удаления. Поле `blocker` доступно в контрактах создания и изменения задачи.
 
 ## Knowledge Base
 

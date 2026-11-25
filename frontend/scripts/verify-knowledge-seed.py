@@ -4,7 +4,7 @@ import sys
 import zipfile
 from xml.etree import ElementTree as ET
 
-seed = json.load(open('public/knowledge-seed.json', encoding='utf-8'))
+seed = json.load(open('../migration-sources/knowledge-seed.json', encoding='utf-8'))
 ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
 def compact(value):
